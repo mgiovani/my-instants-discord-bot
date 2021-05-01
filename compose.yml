@@ -1,0 +1,10 @@
+version: "3.8"
+services:
+  myinstants-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: myinstants-bot:latest
+    environment:
+      - MYINSTANTS_BOT_TOKEN=${MYINSTANTS_BOT_TOKEN}
+      - LOGURU_FORMAT="{time} | <lvl>{message}</lvl>"
