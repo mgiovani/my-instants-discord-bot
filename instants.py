@@ -8,6 +8,7 @@ class InstantsCrawler:
     BASE_URL = 'https://www.myinstants.com'
 
     def get_search_results(self, search):
+        logger.debug(f'Getting search results for "{search}"')
         html = requests.get(f'{self.BASE_URL}/search?name={search}')
         soup = BeautifulSoup(html.content, 'html.parser')
         instants = soup.select('.instant')
@@ -19,18 +20,24 @@ class InstantsCrawler:
 
     def get_instant_name(self, instant):
         instant_link = instant.select_one('.instant-link')
-        return instant_link.text
+        instant_name = instant_link.text
+        logger.debug(f'Found instant name: "{instant_name}"')
+        return instant_name
 
     def get_instant_mp3_link(self, instant):
         mp3_div = instant.select_one('.small-button')
         mouse_event = mp3_div.attrs.get('onmousedown')
         mp3_link = re.search('/media.+.mp3', mouse_event).group(0)
-        return f'{self.BASE_URL}{mp3_link}'
+        full_mp3_link = f'{self.BASE_URL}{mp3_link}'
+        logger.debug(f'Found mp3 link: "{full_mp3_link}"')
+        return full_mp3_link
 
     def get_instant_link(self, instant):
         link_attrs = instant.select_one('.instant-link').attrs
         instant_link = link_attrs['href']
-        return f'{self.BASE_URL}{instant_link}'
+        full_instant_link = f'{self.BASE_URL}{instant_link}'
+        logger.debug(f'Found instant link: "{full_instant_link}"')
+        return full_instant_link
 
     def get_instant_details(self, instant):
         instant_link = self.get_instant_link(instant)
@@ -50,6 +57,7 @@ class InstantsCrawler:
             'uploader_url': uploader_url,
             'views': views,
         }
+        logger.debug(f'Found instant details: "{instant_details}"')
         return instant_details
 
     def get_instant_title(self, soup):

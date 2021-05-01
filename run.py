@@ -269,6 +269,14 @@ class InstantClient(commands.Cog):
         return True
 
     async def cog_before_invoke(self, context):
+        logger.info(
+            '\n'
+            f'Command: {context.command}\n'
+            f'Author: {context.author}\n'
+            f'Channel: {context.channel}\n'
+            f'Guild: {context.guild}\n'
+            f'Messsage: {context.message.clean_content}'
+        )
         context.voice_state = self.get_voice_state(context)
 
     async def cog_command_error(self, context, error):
@@ -320,18 +328,10 @@ class InstantClient(commands.Cog):
             context.voice_state.voice.resume()
             await context.message.add_reaction('⏯')
 
-   # @commands.command()
-   # async def stop(self, context):
-   #     context.voice_state.songs.clear()
-
-   #     if not context.voice_state.is_playing:
-   #         context.voice_state.voice.stop()
-   #         await context.message.add_reaction('⏹')
-
     @commands.command()
     async def skip(self, context):
         if not context.voice_state.is_playing:
-            return await context.send('Not playing any music right now...')
+            return await context.send('Not playing any sound right now...')
 
         voter = context.message.author
         if voter == context.voice_state.current.requester:
@@ -429,35 +429,13 @@ class InstantClient(commands.Cog):
         if context.voice_client:
             if context.voice_client.channel != context.author.voice.channel:
                 raise commands.CommandError('Bot is already in a voice channel.')
-    @commands.command()
-    async def mi(self, context, *, url):
-        async with context.typing():
-            await context.send(f"O >mi já era, usa o >play")
-
-    @commands.command()
-    async def play_antigo(self, context, *, search):
-        async with context.typing():
-            instant = self.crawler.get_single_search_result(search)
-            if not instant:
-                await context.message.add_reaction('❌')
-                await context.send(f"Nothing found for '{search}'")
-                return
-            await context.message.add_reaction('☑️')
-
-            name = self.crawler.get_instant_name(instant)
-            mp3_link = self.crawler.get_instant_mp3_link(instant)
-
-            await context.send(f"Found '{name}'")
-            player = await YTDLSource.from_url(mp3_link, loop=self.bot.loop, stream=True)
-            context.voice_client.play(player, after=lambda e: print(f'Player error: {e}') if e else None)
-
 
 
 bot = commands.Bot(command_prefix=commands.when_mentioned_or(">"),
                    description='Play audio from myinstants')
 @bot.event
 async def on_ready():
-    print('Logged in as:\n{0.user.name}\n{0.user.id}'.format(bot))
+    logger.debug(f'Logged in as: {bot.user.name} - {bot.user.id}')
 
 bot.add_cog(InstantClient(bot))
 bot.run(os.getenv('MYINSTANTS_BOT_TOKEN'))
