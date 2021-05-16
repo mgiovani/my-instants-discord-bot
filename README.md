@@ -66,13 +66,15 @@
 
 ## About The Project
 
-<img src="images/bot-play.png" alt="Project screenshot">
-
+<div align="center">
+  <img src="images/bot-play.png" alt="Project screenshot" >
+</div>
 
 ### Built With
 
 * [Discord.py](https://discordpy.readthedocs.io/en/stable/)
 * [FFmpeg](https://www.ffmpeg.org/)
+* [Beautiful Soup](https://pypi.org/project/beautifulsoup4/)
 
 
 ## Contributing
