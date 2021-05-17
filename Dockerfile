@@ -7,8 +7,12 @@ RUN apt-get -y upgrade
 RUN apt-get install -y ffmpeg
 
 # App dependencies
-ADD . /app/
+COPY requirements.txt /app/
 WORKDIR /app
 RUN pip install -r requirements.txt
 
-ENTRYPOINT ["PYTHONPATH=.", "python", "bot/run.py"]
+# App code
+ADD . /app/
+WORKDIR /app
+
+ENTRYPOINT ["python", "-m", "bot.run"]
