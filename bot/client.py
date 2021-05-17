@@ -4,6 +4,7 @@ import math
 import discord
 from async_timeout import timeout
 from discord.ext import commands
+from loguru import logger
 
 from bot.exceptions import VoiceError, YTDLError
 from bot.song import Song, SongQueue
