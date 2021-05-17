@@ -11,4 +11,4 @@ ADD . /app/
 WORKDIR /app
 RUN pip install -r requirements.txt
 
-ENTRYPOINT ["python", "run.py"]
+ENTRYPOINT ["PYTHONPATH=.", "python", "bot/run.py"]
