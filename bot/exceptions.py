@@ -4,3 +4,7 @@ class VoiceError(Exception):
 
 class YTDLError(Exception):
     pass
+
+
+class MissingBotToken(Exception):
+    pass
