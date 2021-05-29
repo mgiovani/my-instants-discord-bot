@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Deploy
         uses: appleboy/ssh-action@master
+        env:
+          MYINSTANTS_BOT_TOKEN: ${{ secrets.MYINSTANTS_BOT_TOKEN }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
@@ -19,5 +21,6 @@ jobs:
           script: |
             cd ~/my-instants-discord-bot
             git pull
+            export MYINSTANTS_BOT_TOKEN=
             docker-compose -f compose.yml build
             docker-compose -f compose.yml up -d
