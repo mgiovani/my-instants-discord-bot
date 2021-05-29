@@ -89,8 +89,12 @@ def test_get_instant_link(instants_crawler, instant_result):
     )
 
 
-def test_get_instant_details(instants_crawler, instant_result):
-    instant_details = instants_crawler.get_instant_details(instant_result)
+def test_get_instant_details(
+        instants_crawler, instant_result, instant_details_page
+):
+    with mock.patch('crawler.instants.requests.get') as mock_requests:
+        mock_requests.return_value.content = instant_details_page
+        instant_details = instants_crawler.get_instant_details(instant_result)
     assert instant_details == {
         'description': None,
         'likes': '20,526 users',
