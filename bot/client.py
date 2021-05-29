@@ -16,6 +16,7 @@ class VoiceState:
     def __init__(self, bot, context):
         self.bot = bot
         self._context = context
+        self.timed_out = False
 
         self.current = None
         self.voice = None
@@ -61,6 +62,7 @@ class VoiceState:
                         self.current = await self.songs.get()
                 except asyncio.TimeoutError:
                     self.bot.loop.create_task(self.stop())
+                    self.timed_out = True
                     return
 
             self.current.source.volume = self._volume
@@ -99,7 +101,7 @@ class InstantClient(commands.Cog):
 
     def get_voice_state(self, context):
         state = self.voice_states.get(context.guild.id)
-        if not state:
+        if not state or state.timed_out:
             state = VoiceState(self.bot, context)
             self.voice_states[context.guild.id] = state
         return state
