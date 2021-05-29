@@ -22,5 +22,6 @@ jobs:
           script: |
             cd ~/my-instants-discord-bot
             git pull
+            export MYINSTANTS_BOT_TOKEN=$MYINSTANTS_BOT_TOKEN
             docker-compose -f compose.yml build
             docker-compose -f compose.yml up -d
