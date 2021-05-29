@@ -19,7 +19,7 @@
     A simple discord bot to play <a href="https://www.myinstants.com/">MyInstants</a> sounds.
     <br />
     <br />
-    <a href="https://discord.com/api/oauth2/authorize?client_id=836019264124354571&permissions=3164224&scope=bot">
+    <a href="https://discord.com/api/oauth2/authorize?client_id=836019264124354571&permissions=2150747200&scope=bot">
         Invite the bot to your Discord server!
         <br />
         <img src="https://discord.com/assets/e4923594e694a21542a489471ecffa50.svg" alt="Add to your discord server" height="100">
