@@ -1,0 +1,28 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+
+      - name: Copy files via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "."
+          target: "/opt/app"
+          rm: true
+
+      - name: Build and run new Docker image
+        run: |
+          docker-compose -f compose.yml build
+          docker-compose -f compose.yml up -d
