@@ -178,7 +178,7 @@ class InstantClient(commands.Cog):
             context.voice_state.voice.resume()
             await context.message.add_reaction('⏯')
 
-    @commands.command()
+    @commands.command(aliases=['s'])
     async def skip(self, context):
         if not context.voice_state.is_playing:
             return await context.send('Not playing any sound right now...')
@@ -203,7 +203,7 @@ class InstantClient(commands.Cog):
         else:
             await context.send('You have already voted to skip this song.')
 
-    @commands.command()
+    @commands.command(aliases=['q'])
     async def queue(self, context, *, page: int = 1):
         if len(context.voice_state.songs) == 0:
             return await context.send('Empty queue.')
@@ -252,7 +252,7 @@ class InstantClient(commands.Cog):
         context.voice_state.loop = not context.voice_state.loop
         await context.message.add_reaction('✅')
 
-    @commands.command()
+    @commands.command(aliases=['p'])
     async def play(self, context: commands.Context, *, search: str):
         if not context.voice_state.voice:
             await context.invoke(self.join)
