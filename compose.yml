@@ -5,6 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: myinstants-bot:latest
+    restart: always
     environment:
       - MYINSTANTS_BOT_TOKEN=${MYINSTANTS_BOT_TOKEN}
       - LOGURU_FORMAT="{time} | <lvl>{message}</lvl>"
