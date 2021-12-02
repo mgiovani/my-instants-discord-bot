@@ -37,7 +37,7 @@
 
 ## Commands
 
-- ``>play {something to search}``
+- ``>play something to search``
 - ``>join``
 - ``>leave``
 - ``>loop``
