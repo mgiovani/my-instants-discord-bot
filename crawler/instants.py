@@ -27,7 +27,7 @@ class InstantsCrawler:
 
     def get_instant_mp3_link(self, instant):
         mp3_div = instant.select_one('.small-button')
-        mouse_event = mp3_div.attrs.get('onmousedown')
+        mouse_event = mp3_div.attrs.get('onclick')
         mp3_link = re.search('/media.+.mp3', mouse_event).group(0)
         full_mp3_link = f'{self.BASE_URL}{mp3_link}'
         logger.debug(f'Found mp3 link: "{full_mp3_link}"')
