@@ -1,5 +1,6 @@
 import os
 
+from discord import Activity, ActivityType
 from discord.ext import commands
 from loguru import logger
 
@@ -7,8 +8,11 @@ from bot.client import InstantClient
 from bot.exceptions import MissingBotToken
 
 
-bot = commands.Bot(command_prefix=commands.when_mentioned_or(">"),
-                   description='Play audio from myinstants')
+bot = commands.Bot(
+    command_prefix=commands.when_mentioned_or(">"),
+    description='Play audio from myinstants',
+    activity=Activity(type=ActivityType.listening, name='We are back!')
+)
 
 
 @bot.event
