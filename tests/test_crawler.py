@@ -97,11 +97,11 @@ def test_get_instant_details(
         instant_details = instants_crawler.get_instant_details(instant_result)
     assert instant_details == {
         'description': None,
-        'likes': '20,526 users',
+        'likes': '43,960 users',
         'title': 'Discord Notification',
         'uploader_name': 'Anonymous',
         'uploader_url': None,
-        'views': '372,608 views',
+        'views': '660,100 views',
     }
 
 
@@ -117,12 +117,12 @@ def test_get_instant_description(soup_instant_details, instants_crawler):
 
 def test_get_instant_likes(soup_instant_details, instants_crawler):
     result = instants_crawler.get_instant_likes(soup_instant_details)
-    assert result == '20,526 users'
+    assert result == '43,960 users'
 
 
 def test_get_instant_views(soup_instant_details, instants_crawler):
     result = instants_crawler.get_instant_views(soup_instant_details)
-    assert result == '372,608 views'
+    assert result == '660,100 views'
 
 
 def test_get_instant_uploader_name(soup_instant_details, instants_crawler):
