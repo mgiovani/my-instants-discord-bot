@@ -11,7 +11,7 @@ from bot.exceptions import MissingBotToken
 bot = commands.Bot(
     command_prefix=commands.when_mentioned_or(">"),
     description='Play audio from myinstants',
-    activity=Activity(type=ActivityType.listening, name='We are back!')
+    activity=Activity(type=ActivityType.listening, name='Discord removed my permissions, trying to fix :(')
 )
 
 
