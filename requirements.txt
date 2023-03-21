@@ -45,4 +45,4 @@ urllib3==1.26.5
 websocket-client==0.58.0
 yarl==1.6.3
 youtube-dl==2021.4.26
-idna
+idna==2.10
