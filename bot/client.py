@@ -127,7 +127,7 @@ class InstantClient(commands.Cog):
         await context.send('An error occurred: {}'.format(str(error)))
         logger.error('An error occurred: {}'.format(str(error)))
 
-    @commands.hybrid_command(name="join", with_app_command= True, description="Make Myinstants bot join.")
+    @commands.hybrid_command(name="join", invoke_without_subcommand=True, with_app_command= True, description="Make Myinstants bot join.")
     async def join(self, context):
         if not context.author.voice:
             raise VoiceError('You are not connected to a voice channel.')
