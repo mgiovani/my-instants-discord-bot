@@ -11,11 +11,11 @@ from bot.exceptions import MissingBotToken
 
 
 bot = commands.Bot(
-    command_prefix=commands.when_mentioned_or(">"),
-    description="Play audio from myinstants",
+    command_prefix=commands.when_mentioned_or('>'),
+    description='Play audio from myinstants',
     activity=Activity(
         type=ActivityType.listening,
-        name="Discord removed my permissions, trying to fix :(",
+        name='Discord removed my permissions, trying to fix :(',
     ),
     intents=discord.Intents.all(),
 )
@@ -23,19 +23,17 @@ bot = commands.Bot(
 
 @bot.event
 async def on_ready():
-    logger.debug(f"Logged in as: {bot.user.name} - {bot.user.id}")
+    logger.debug(f'Logged in as: {bot.user.name} - {bot.user.id}')
     synced = await bot.tree.sync()
-    logger.debug(f"Synced {len(synced)} command(s)")
-
-
-bot_token = os.getenv("MYINSTANTS_BOT_TOKEN")
-if not bot_token:
-    raise MissingBotToken
+    logger.debug(f'Synced {len(synced)} command(s)')
 
 
 async def add_cogs(bot):
     await bot.add_cog(InstantClient(bot))
 
+bot_token = os.getenv('MYINSTANTS_BOT_TOKEN')
+if not bot_token:
+    raise MissingBotToken
 
 asyncio.run(add_cogs(bot))
 bot.run(bot_token)
