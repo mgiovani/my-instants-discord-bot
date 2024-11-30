@@ -1,7 +1,6 @@
 import asyncio
 import os
 
-import discord
 from discord import Activity, ActivityType, Intents
 from discord.ext import commands
 from loguru import logger
@@ -10,7 +9,7 @@ from bot.client import InstantClient
 from bot.exceptions import MissingBotToken
 
 intents = Intents.default()
-intents.message_content = True # Outside the default ones, necessary
+intents.message_content = True
 
 bot = commands.Bot(
     command_prefix=commands.when_mentioned_or('>'),

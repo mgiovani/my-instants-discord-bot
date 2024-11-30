@@ -124,7 +124,10 @@ class InstantClient(commands.Cog):
         context.voice_state = self.get_voice_state(context)
 
     async def cog_command_error(self, context, error):
-        await context.send('An error occurred: {}'.format(str(error)), ephemeral=True)
+        await context.send(
+            'An error occurred: {}'.format(str(error)),
+            ephemeral=True
+        )
         logger.error('An error occurred: {}'.format(str(error)))
 
     async def join(self, context):
