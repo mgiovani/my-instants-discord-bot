@@ -124,11 +124,14 @@ class InstantClient(commands.Cog):
         context.voice_state = self.get_voice_state(context)
 
     async def cog_command_error(self, context, error):
-        await context.send('An error occurred: {}'.format(str(error)))
+        await context.send(
+            'An error occurred: {}'.format(str(error)),
+            ephemeral=True
+        )
         logger.error('An error occurred: {}'.format(str(error)))
 
-    @commands.command(invoke_without_subcommand=True)
     async def join(self, context):
+        """Utility function to make the bot join the user's voice channel."""
         if not context.author.voice:
             raise VoiceError('You are not connected to a voice channel.')
 
@@ -137,15 +140,25 @@ class InstantClient(commands.Cog):
             return await context.voice_client.move_to(channel)
         context.voice_state.voice = await channel.connect()
 
-    @commands.command(aliases=['disconnect', 'stop'])
+    @commands.hybrid_command(
+        name='leave',
+        aliases=['disconnect', 'stop'],
+        with_app_command=True,
+        description='Disconnect Myinstants bot.'
+    )
     async def leave(self, context):
         if not context.voice_state.voice:
             return await context.send('Not connected to any voice channel.')
 
+        await context.send('Leaving current channel.')
         await context.voice_state.stop()
         del self.voice_states[context.guild.id]
 
-    @commands.command()
+    @commands.hybrid_command(
+        name='volume',
+        with_app_command=True,
+        description='Set volume sound.'
+    )
     async def volume(self, context, *, volume: int):
         if not context.voice_state.is_playing:
             return await context.send('Nothing being played at the moment.')
@@ -156,36 +169,54 @@ class InstantClient(commands.Cog):
         context.voice_state.volume = volume / 100
         await context.send(f'Volume of the player set to {volume}%')
 
-    @commands.command(aliases=['current', 'playing'])
+    @commands.hybrid_command(
+        name='now',
+        aliases=['current', 'playing'],
+        with_app_command=True,
+        description='Show sound currently playing.'
+    )
     async def now(self, context):
         await context.send(embed=context.voice_state.current.create_embed())
 
-    @commands.command()
+    @commands.hybrid_command(
+        name='pause',
+        with_app_command=True,
+        description='Pause my instants sound.'
+    )
     async def pause(self, context):
         if (
-                not context.voice_state.is_playing
-                and context.voice_state.voice.is_playing()
+            context.voice_state.voice
+            and context.voice_state.voice.is_playing()
         ):
+            await context.send('Pausing current sound.')
             context.voice_state.voice.pause()
-            await context.message.add_reaction('⏯')
 
-    @commands.command()
+    @commands.hybrid_command(
+        name='resume',
+        with_app_command=True,
+        description='Resume my instants sound.'
+    )
     async def resume(self, context):
         if (
-                not context.voice_state.is_playing
-                and context.voice_state.voice.is_paused()
+            context.voice_state.voice
+            and context.voice_state.voice.is_paused()
         ):
+            await context.send('Resuming paused sound.')
             context.voice_state.voice.resume()
-            await context.message.add_reaction('⏯')
 
-    @commands.command(aliases=['s'])
+    @commands.hybrid_command(
+        name='skip',
+        aliases=['s'],
+        with_app_command=True,
+        description='Skip current sound.'
+    )
     async def skip(self, context):
         if not context.voice_state.is_playing:
             return await context.send('Not playing any sound right now...')
 
         voter = context.message.author
         if voter == context.voice_state.current.requester:
-            await context.message.add_reaction('⏭')
+            await context.send('Skipping current sound.')
             context.voice_state.skip()
 
         elif voter.id not in context.voice_state.skip_votes:
@@ -193,7 +224,6 @@ class InstantClient(commands.Cog):
             total_votes = len(context.voice_state.skip_votes)
 
             if total_votes >= 3:
-                await context.message.add_reaction('⏭')
                 context.voice_state.skip()
             else:
                 await context.send(
@@ -203,7 +233,11 @@ class InstantClient(commands.Cog):
         else:
             await context.send('You have already voted to skip this song.')
 
-    @commands.command(aliases=['q'])
+    @commands.hybrid_command(
+        name='queue',
+        with_app_command=True,
+        description='See sound queue.'
+    )
     async def queue(self, context, *, page: int = 1):
         if len(context.voice_state.songs) == 0:
             return await context.send('Empty queue.')
@@ -227,33 +261,48 @@ class InstantClient(commands.Cog):
             .set_footer(text='Viewing page {}/{}'.format(page, pages)))
         await context.send(embed=embed)
 
-    @commands.command()
+    @commands.hybrid_command(
+        name='shuffle',
+        with_app_command=True,
+        description='Shuffle queue.'
+    )
     async def shuffle(self, context: commands.Context):
         if len(context.voice_state.songs) == 0:
             return await context.send('Empty queue.')
 
         context.voice_state.songs.shuffle()
-        await context.message.add_reaction('✅')
 
-    @commands.command()
+    @commands.hybrid_command(
+        name='remove',
+        with_app_command=True,
+        description='Remove from queue.'
+    )
     async def remove(self, context: commands.Context, index: int):
         if len(context.voice_state.songs) == 0:
             return await context.send('Empty queue.')
 
         context.voice_state.songs.remove(index - 1)
-        await context.message.add_reaction('✅')
 
-    @commands.command()
+    @commands.hybrid_command(
+        name='loop',
+        with_app_command=True,
+        description='Loop last myinstants sound'
+    )
     async def loop(self, context: commands.Context):
         if not context.voice_state.is_playing:
             return await context.send('Nothing being played at the moment.')
 
         # Inverse boolean value to loop and unloop.
         context.voice_state.loop = not context.voice_state.loop
-        await context.message.add_reaction('✅')
 
-    @commands.command(aliases=['p'])
+    @commands.hybrid_command(
+        name='mi',
+        aliases=['play', 'p'],
+        with_app_command=True,
+        description='Play myinstants sound'
+    )
     async def play(self, context: commands.Context, *, search: str):
+
         if not context.voice_state.voice:
             await context.invoke(self.join)
 
@@ -261,12 +310,9 @@ class InstantClient(commands.Cog):
             try:
                 instant = self.crawler.get_single_search_result(search)
                 if not instant:
-                    await context.message.add_reaction('❌')
                     raise YTDLError(
                         'Couldn\'t retrieve any matches for `{}`'
                         .format(search))
-                    return
-
                 mp3_link = self.crawler.get_instant_mp3_link(instant)
                 instant_details = self.crawler.get_instant_details(instant)
                 source = await YTDLSource.from_url(
@@ -274,14 +320,14 @@ class InstantClient(commands.Cog):
             except YTDLError as e:
                 await context.send(
                     'An error occurred while processing this request: {}'
-                    .format(str(e)))
+                    .format(str(e)),
+                    ephemeral=True)
             else:
                 song = Song(source)
 
                 await context.voice_state.songs.put(song)
                 await context.send('Enqueued {}'.format(str(source)))
 
-    @join.before_invoke
     @play.before_invoke
     async def ensure_voice_state(self, context: commands.Context):
         if not context.author.voice or not context.author.voice.channel:
