@@ -38,7 +38,6 @@
 ## Commands
 
 - ``/mi <search>: Play a sound from MyInstants.``
-- ``/join: Join a channel.``
 - ``/leave: Disconnect the bot from the voice channel.``
 - ``/loop: Toggle looping of the current track.``
 - ``/now: Shows the current sound playing.``
