@@ -7,15 +7,15 @@ from loguru import logger
 from bot.client import InstantClient
 from bot.exceptions import MissingBotToken
 
-<<<<<<< Updated upstream
-=======
 intents = Intents.default()
->>>>>>> Stashed changes
 
 bot = commands.Bot(
-    command_prefix=commands.when_mentioned_or(">"),
+    command_prefix=commands.when_mentioned_or('>'),
     description='Play audio from myinstants',
-    activity=Activity(type=ActivityType.listening, name='Discord removed my permissions, trying to fix :(')
+    activity=Activity(
+        type=ActivityType.listening,
+        name='Discord removed my permissions, trying to fix :(',
+    ),
 )
 
 

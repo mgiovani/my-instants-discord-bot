@@ -124,13 +124,9 @@ class InstantClient(commands.Cog):
         return True
 
     async def cog_command_error(self, context, error):
-<<<<<<< Updated upstream
-        await context.send('An error occurred: {}'.format(str(error)))
-=======
         await context.send(
             'An error occurred: {}'.format(str(error)), ephemeral=True
         )
->>>>>>> Stashed changes
         logger.error('An error occurred: {}'.format(str(error)))
 
     @commands.command(invoke_without_subcommand=True)
@@ -143,58 +139,6 @@ class InstantClient(commands.Cog):
             return await context.voice_client.move_to(channel)
         context.voice_state.voice = await channel.connect()
 
-<<<<<<< Updated upstream
-    @commands.command(aliases=['disconnect', 'stop'])
-    async def leave(self, context):
-        if not context.voice_state.voice:
-            return await context.send('Not connected to any voice channel.')
-
-        await context.voice_state.stop()
-        del self.voice_states[context.guild.id]
-
-    @commands.command()
-    async def volume(self, context, *, volume: int):
-        if not context.voice_state.is_playing:
-            return await context.send('Nothing being played at the moment.')
-
-        if 0 > volume > 100:
-            return await context.send('Volume must be between 0 and 100')
-
-        context.voice_state.volume = volume / 100
-        await context.send(f'Volume of the player set to {volume}%')
-
-    @commands.command(aliases=['current', 'playing'])
-    async def now(self, context):
-        await context.send(embed=context.voice_state.current.create_embed())
-
-    @commands.command()
-    async def pause(self, context):
-        if (
-                not context.voice_state.is_playing
-                and context.voice_state.voice.is_playing()
-        ):
-            context.voice_state.voice.pause()
-            await context.message.add_reaction('⏯')
-
-    @commands.command()
-    async def resume(self, context):
-        if (
-                not context.voice_state.is_playing
-                and context.voice_state.voice.is_paused()
-        ):
-            context.voice_state.voice.resume()
-            await context.message.add_reaction('⏯')
-
-    @commands.command(aliases=['s'])
-    async def skip(self, context):
-        if not context.voice_state.is_playing:
-            return await context.send('Not playing any sound right now...')
-
-        voter = context.message.author
-        if voter == context.voice_state.current.requester:
-            await context.message.add_reaction('⏭')
-            context.voice_state.skip()
-=======
     @app_commands.command(
         name='leave', description='Disconnect Myinstants bot.'
     )
@@ -242,7 +186,6 @@ class InstantClient(commands.Cog):
         if voice_state.voice and voice_state.voice.is_playing():
             await interaction.response.send_message('Pausing current sound.')
             voice_state.voice.pause()
->>>>>>> Stashed changes
 
     @app_commands.command(
         name='resume', description='Resume my instants sound.'
@@ -271,12 +214,7 @@ class InstantClient(commands.Cog):
             total_votes = len(voice_state.skip_votes)
 
             if total_votes >= 3:
-<<<<<<< Updated upstream
-                await context.message.add_reaction('⏭')
-                context.voice_state.skip()
-=======
                 voice_state.skip()
->>>>>>> Stashed changes
             else:
                 await interaction.response.send_message(
                     f'Skip vote added, currently at **{total_votes}/3**'
@@ -287,18 +225,11 @@ class InstantClient(commands.Cog):
                 'You have already voted to skip this song.'
             )
 
-<<<<<<< Updated upstream
-    @commands.command(aliases=['q'])
-    async def queue(self, context, *, page: int = 1):
-        if len(context.voice_state.songs) == 0:
-            return await context.send('Empty queue.')
-=======
     @app_commands.command(name='queue', description='See sound queue.')
     async def queue(self, interaction: discord.Interaction, page: int = 1):
         voice_state = self.get_voice_state(interaction)
         if len(voice_state.songs) == 0:
             return await interaction.response.send_message('Empty queue.')
->>>>>>> Stashed changes
 
         items_per_page = 10
         pages = math.ceil(len(voice_state.songs) / items_per_page)
@@ -307,49 +238,6 @@ class InstantClient(commands.Cog):
         end = start + items_per_page
 
         queue = ''
-<<<<<<< Updated upstream
-        for i, song in enumerate(
-                context.voice_state.songs[start:end], start=start):
-            queue += (
-                '`{0}.` [**{1.source.title}**]({1.source.url})\n'
-                .format(i + 1, song))
-
-        embed = (discord.Embed(
-            description='**{} sounds:**\n\n{}'
-            .format(len(context.voice_state.songs), queue))
-            .set_footer(text='Viewing page {}/{}'.format(page, pages)))
-        await context.send(embed=embed)
-
-    @commands.command()
-    async def shuffle(self, context: commands.Context):
-        if len(context.voice_state.songs) == 0:
-            return await context.send('Empty queue.')
-
-        context.voice_state.songs.shuffle()
-        await context.message.add_reaction('✅')
-
-    @commands.command()
-    async def remove(self, context: commands.Context, index: int):
-        if len(context.voice_state.songs) == 0:
-            return await context.send('Empty queue.')
-
-        context.voice_state.songs.remove(index - 1)
-        await context.message.add_reaction('✅')
-
-    @commands.command()
-    async def loop(self, context: commands.Context):
-        if not context.voice_state.is_playing:
-            return await context.send('Nothing being played at the moment.')
-
-        # Inverse boolean value to loop and unloop.
-        context.voice_state.loop = not context.voice_state.loop
-        await context.message.add_reaction('✅')
-
-    @commands.command(aliases=['p'])
-    async def play(self, context: commands.Context, *, search: str):
-        if not context.voice_state.voice:
-            await context.invoke(self.join)
-=======
         for i, song in enumerate(voice_state.songs[start:end], start=start):
             queue += '`{0}.` [**{1.source.title}**]({1.source.url})\n'.format(
                 i + 1, song
@@ -409,7 +297,6 @@ class InstantClient(commands.Cog):
         if not voice_state.voice:
             channel = interaction.user.voice.channel
             voice_state.voice = await channel.connect()
->>>>>>> Stashed changes
 
         async with interaction.channel.typing():
             try:
@@ -417,14 +304,8 @@ class InstantClient(commands.Cog):
                 if not instant:
                     await context.message.add_reaction('❌')
                     raise YTDLError(
-<<<<<<< Updated upstream
-                        'Couldn\'t retrieve any matches for `{}`'
-                        .format(search))
-                    return
-=======
                         f"Couldn't retrieve any matches for `{search}`"
                     )
->>>>>>> Stashed changes
 
                 mp3_link = self.crawler.get_instant_mp3_link(instant)
                 instant_details = self.crawler.get_instant_details(instant)
@@ -432,17 +313,11 @@ class InstantClient(commands.Cog):
                     interaction, mp3_link, instant_details, loop=self.bot.loop
                 )
             except YTDLError as e:
-<<<<<<< Updated upstream
-                await context.send(
-                    'An error occurred while processing this request: {}'
-                    .format(str(e)))
-=======
                 await interaction.response.send_message(
                     'An error occurred while processing this request. '
                     f'Details: {str(e)}',
                     ephemeral=True,
                 )
->>>>>>> Stashed changes
             else:
                 song = Song(source)
                 await voice_state.songs.put(song)
@@ -450,22 +325,6 @@ class InstantClient(commands.Cog):
                     f'Enqueued {str(source)}.'
                 )
 
-<<<<<<< Updated upstream
-                await context.voice_state.songs.put(song)
-                await context.send('Enqueued {}'.format(str(source)))
-
-    @join.before_invoke
-    @play.before_invoke
-    async def ensure_voice_state(self, context: commands.Context):
-        if not context.author.voice or not context.author.voice.channel:
-            raise commands.CommandError(
-                'You are not connected to any voice channel.')
-
-        if context.voice_client:
-            if context.voice_client.channel != context.author.voice.channel:
-                raise commands.CommandError(
-                    'Bot is already in a voice channel.')
-=======
     @app_commands.command(
         name='help', description='List and describe all available commands.'
     )
@@ -497,4 +356,3 @@ class InstantClient(commands.Cog):
             color=discord.Color.blue(),
         )
         await interaction.response.send_message(embed=embed)
->>>>>>> Stashed changes
