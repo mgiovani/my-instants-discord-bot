@@ -2,13 +2,15 @@ import asyncio
 import os
 
 import discord
-from discord import Activity, ActivityType
+from discord import Activity, ActivityType, Intents
 from discord.ext import commands
 from loguru import logger
 
 from bot.client import InstantClient
 from bot.exceptions import MissingBotToken
 
+intents = Intents.default()
+intents.message_content = True # Outside the default ones, necessary
 
 bot = commands.Bot(
     command_prefix=commands.when_mentioned_or('>'),
@@ -17,7 +19,7 @@ bot = commands.Bot(
         type=ActivityType.listening,
         name='Discord removed my permissions, trying to fix :(',
     ),
-    intents=discord.Intents.all(),
+    intents=intents,
 )
 
 

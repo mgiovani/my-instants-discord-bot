@@ -124,20 +124,14 @@ class InstantClient(commands.Cog):
         context.voice_state = self.get_voice_state(context)
 
     async def cog_command_error(self, context, error):
-        await context.send('An error occurred: {}'.format(str(error)))
+        await context.send('An error occurred: {}'.format(str(error)), ephemeral=True)
         logger.error('An error occurred: {}'.format(str(error)))
 
-    @commands.hybrid_command(
-        name='join',
-        invoke_without_subcommand=True,
-        with_app_command=True,
-        description='Make Myinstants bot join.',
-    )
     async def join(self, context):
+        """Utility function to make the bot join the user's voice channel."""
         if not context.author.voice:
             raise VoiceError('You are not connected to a voice channel.')
 
-        await context.send('Joining user\'s channel.')
         channel = context.author.voice.channel
         if context.voice_state.voice:
             return await context.voice_client.move_to(channel)
@@ -145,6 +139,7 @@ class InstantClient(commands.Cog):
 
     @commands.hybrid_command(
         name='leave',
+        aliases=['disconnect', 'stop'],
         with_app_command=True,
         description='Disconnect Myinstants bot.'
     )
@@ -173,6 +168,7 @@ class InstantClient(commands.Cog):
 
     @commands.hybrid_command(
         name='now',
+        aliases=['current', 'playing'],
         with_app_command=True,
         description='Show sound currently playing.'
     )
@@ -186,12 +182,11 @@ class InstantClient(commands.Cog):
     )
     async def pause(self, context):
         if (
-            not context.voice_state.is_playing
+            context.voice_state.voice
             and context.voice_state.voice.is_playing()
         ):
             await context.send('Pausing current sound.')
             context.voice_state.voice.pause()
-            await context.message.add_reaction('⏯')
 
     @commands.hybrid_command(
         name='resume',
@@ -200,15 +195,15 @@ class InstantClient(commands.Cog):
     )
     async def resume(self, context):
         if (
-                not context.voice_state.is_playing
-                and context.voice_state.voice.is_paused()
+            context.voice_state.voice
+            and context.voice_state.voice.is_paused()
         ):
-            await context.send("Resuming paused sound.")
+            await context.send('Resuming paused sound.')
             context.voice_state.voice.resume()
-            await context.message.add_reaction('⏯')
 
     @commands.hybrid_command(
         name='skip',
+        aliases=['s'],
         with_app_command=True,
         description='Skip current sound.'
     )
@@ -218,8 +213,7 @@ class InstantClient(commands.Cog):
 
         voter = context.message.author
         if voter == context.voice_state.current.requester:
-            await context.message.add_reaction('⏭')
-            context.send('Skipping current sound.')
+            await context.send('Skipping current sound.')
             context.voice_state.skip()
 
         elif voter.id not in context.voice_state.skip_votes:
@@ -227,7 +221,6 @@ class InstantClient(commands.Cog):
             total_votes = len(context.voice_state.skip_votes)
 
             if total_votes >= 3:
-                await context.message.add_reaction('⏭')
                 context.voice_state.skip()
             else:
                 await context.send(
@@ -275,7 +268,6 @@ class InstantClient(commands.Cog):
             return await context.send('Empty queue.')
 
         context.voice_state.songs.shuffle()
-        await context.message.add_reaction('✅')
 
     @commands.hybrid_command(
         name='remove',
@@ -287,7 +279,6 @@ class InstantClient(commands.Cog):
             return await context.send('Empty queue.')
 
         context.voice_state.songs.remove(index - 1)
-        await context.message.add_reaction('✅')
 
     @commands.hybrid_command(
         name='loop',
@@ -300,14 +291,15 @@ class InstantClient(commands.Cog):
 
         # Inverse boolean value to loop and unloop.
         context.voice_state.loop = not context.voice_state.loop
-        await context.message.add_reaction('✅')
 
     @commands.hybrid_command(
-        name='play',
+        name='mi',
+        aliases=['play', 'p'],
         with_app_command=True,
         description='Play myinstants sound'
     )
     async def play(self, context: commands.Context, *, search: str):
+
         if not context.voice_state.voice:
             await context.invoke(self.join)
 
@@ -315,12 +307,9 @@ class InstantClient(commands.Cog):
             try:
                 instant = self.crawler.get_single_search_result(search)
                 if not instant:
-                    await context.message.add_reaction('❌')
                     raise YTDLError(
                         'Couldn\'t retrieve any matches for `{}`'
                         .format(search))
-                    return
-
                 mp3_link = self.crawler.get_instant_mp3_link(instant)
                 instant_details = self.crawler.get_instant_details(instant)
                 source = await YTDLSource.from_url(
@@ -328,14 +317,14 @@ class InstantClient(commands.Cog):
             except YTDLError as e:
                 await context.send(
                     'An error occurred while processing this request: {}'
-                    .format(str(e)))
+                    .format(str(e)),
+                    ephemeral=True)
             else:
                 song = Song(source)
 
                 await context.voice_state.songs.put(song)
                 await context.send('Enqueued {}'.format(str(source)))
 
-    @join.before_invoke
     @play.before_invoke
     async def ensure_voice_state(self, context: commands.Context):
         if not context.author.voice or not context.author.voice.channel:
