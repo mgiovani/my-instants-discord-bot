@@ -9,7 +9,6 @@ from bot.client import InstantClient
 from bot.exceptions import MissingBotToken
 
 intents = Intents.default()
-intents.message_content = True
 
 bot = commands.Bot(
     command_prefix=commands.when_mentioned_or('>'),
@@ -31,6 +30,7 @@ async def on_ready():
 
 async def add_cogs(bot):
     await bot.add_cog(InstantClient(bot))
+
 
 bot_token = os.getenv('MYINSTANTS_BOT_TOKEN')
 if not bot_token:
