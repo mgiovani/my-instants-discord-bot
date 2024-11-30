@@ -302,7 +302,6 @@ class InstantClient(commands.Cog):
             try:
                 instant = self.crawler.get_single_search_result(search)
                 if not instant:
-                    await context.message.add_reaction('❌')
                     raise YTDLError(
                         f"Couldn't retrieve any matches for `{search}`"
                     )

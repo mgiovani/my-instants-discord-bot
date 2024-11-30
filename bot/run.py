@@ -1,6 +1,6 @@
 import os
 
-from discord import Activity, ActivityType
+from discord import Activity, ActivityType, Intents
 from discord.ext import commands
 from loguru import logger
 
@@ -16,6 +16,7 @@ bot = commands.Bot(
         type=ActivityType.listening,
         name='Discord removed my permissions, trying to fix :(',
     ),
+    intents=intents,
 )
 
 
