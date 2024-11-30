@@ -80,18 +80,18 @@ class InstantsCrawler:
 
     def get_instant_uploader_name(self, soup):
         try:
-            views_div = (
-                soup.select_one('#instant-page-likes').nextSibling.nextSibling
-            )
+            views_div = soup.select_one(
+                '#instant-page-likes'
+            ).nextSibling.nextSibling
             return views_div.a.text
         except AttributeError:
             return 'Anonymous'
 
     def get_instant_uploader_url(self, soup):
         try:
-            views_div = (
-                soup.select_one('#instant-page-likes').nextSibling.nextSibling
-            )
+            views_div = soup.select_one(
+                '#instant-page-likes'
+            ).nextSibling.nextSibling
             href_attr = views_div.a.attrs.get('href')
             return f'{self.BASE_URL}{href_attr}'
         except AttributeError:
@@ -99,9 +99,9 @@ class InstantsCrawler:
 
     def get_instant_views(self, soup):
         try:
-            views_div = (
-                soup.select_one('#instant-page-likes').nextSibling.nextSibling
-            )
+            views_div = soup.select_one(
+                '#instant-page-likes'
+            ).nextSibling.nextSibling
             return re.search(r'[\d,]+ *views', views_div.text).group(0)
         except AttributeError:
             return None

@@ -14,18 +14,28 @@ class Song:
         self.requester = source.requester
 
     def create_embed(self):
-        embed = (discord.Embed(
-            title='Now playing',
-            description='```css\n{0.source.title}\n```'.format(self),
-            color=discord.Color.blurple())
+        embed = (
+            discord.Embed(
+                title='Now playing',
+                description='```css\n{0.source.title}\n```'.format(self),
+                color=discord.Color.blurple(),
+            )
             .add_field(name='Requested by', value=self.requester.mention)
-            .add_field(name='Uploader', value=(
-                '[{0.source.uploader}]({0.source.uploader_url})'.format(self)))
-            .add_field(name='URL', value=(
-                '[Click]({0.source.url})'.format(self)))
+            .add_field(
+                name='Uploader',
+                value=(
+                    '[{0.source.uploader}]({0.source.uploader_url})'.format(
+                        self
+                    )
+                ),
+            )
+            .add_field(
+                name='URL', value=('[Click]({0.source.url})'.format(self))
+            )
             .add_field(name='Views', value=self.source.views)
             .add_field(name='Likes', value=self.source.likes)
-            .set_thumbnail(url=self.source.thumbnail))
+            .set_thumbnail(url=self.source.thumbnail)
+        )
 
         return embed
 
@@ -33,9 +43,9 @@ class Song:
 class SongQueue(asyncio.Queue):
     def __getitem__(self, item):
         if isinstance(item, slice):
-            return list(itertools.islice(
-                self._queue, item.start, item.stop, item.step
-            ))
+            return list(
+                itertools.islice(self._queue, item.start, item.stop, item.step)
+            )
         else:
             return self._queue[item]
 

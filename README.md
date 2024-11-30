@@ -37,17 +37,17 @@
 
 ## Commands
 
-- ``>play something to search``
-- ``>join``
-- ``>leave``
-- ``>loop``
-- ``>now``
-- ``>pause``
-- ``>queue``
-- ``>remove``
-- ``>resume``
-- ``>shuffle``
-- ``>skip``
+- ``/mi <search>: Play a sound from MyInstants.``
+- ``/join: Join a channel.``
+- ``/leave: Disconnect the bot from the voice channel.``
+- ``/loop: Toggle looping of the current track.``
+- ``/now: Shows the current sound playing.``
+- ``/pause: Pause the current sound.``
+- ``/queue: Show the queue.``
+- ``/remove <index>: Remove a track from the queue by its position.``
+- ``/resume: Resume sound.``
+- ``/shuffle: Shuffle the queue``
+- ``/skip: Skip the current sound.``
 
 ## Summary
 

@@ -7,6 +7,10 @@ from loguru import logger
 from bot.client import InstantClient
 from bot.exceptions import MissingBotToken
 
+<<<<<<< Updated upstream
+=======
+intents = Intents.default()
+>>>>>>> Stashed changes
 
 bot = commands.Bot(
     command_prefix=commands.when_mentioned_or(">"),
@@ -18,6 +22,7 @@ bot = commands.Bot(
 @bot.event
 async def on_ready():
     logger.debug(f'Logged in as: {bot.user.name} - {bot.user.id}')
+
 
 bot_token = os.getenv('MYINSTANTS_BOT_TOKEN')
 if not bot_token:
