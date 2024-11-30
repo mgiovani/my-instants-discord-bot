@@ -49,7 +49,7 @@ def test_instants_crawler_has_base_url():
 
 @mock.patch('crawler.instants.requests.get')
 def test_instants_crawler_get_search_results(
-        mock_requests, search_results_page, instants_crawler
+    mock_requests, search_results_page, instants_crawler
 ):
     mock_requests.return_value.content = search_results_page
 
@@ -62,7 +62,7 @@ def test_instants_crawler_get_search_results(
 
 @mock.patch('crawler.instants.requests.get')
 def test_instants_crawler_get_single_search_result(
-        mock_requests, search_results_page, instants_crawler
+    mock_requests, search_results_page, instants_crawler
 ):
     mock_requests.return_value.content = search_results_page
 
@@ -90,7 +90,7 @@ def test_get_instant_link(instants_crawler, instant_result):
 
 
 def test_get_instant_details(
-        instants_crawler, instant_result, instant_details_page
+    instants_crawler, instant_result, instant_details_page
 ):
     with mock.patch('crawler.instants.requests.get') as mock_requests:
         mock_requests.return_value.content = instant_details_page
