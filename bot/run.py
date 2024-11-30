@@ -15,7 +15,7 @@ bot = commands.Bot(
     description='Play audio from myinstants',
     activity=Activity(
         type=ActivityType.listening,
-        name='Discord removed my permissions, trying to fix :(',
+        name="We're back baby! /mi",
     ),
     intents=intents,
 )
