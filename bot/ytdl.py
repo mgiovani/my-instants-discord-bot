@@ -1,11 +1,13 @@
-import discord
-import youtube_dl
 import asyncio
 import functools
+
+import discord
+import yt_dlp
+
 from bot.exceptions import YTDLError
 
-# Ignore console errors
-youtube_dl.utils.bug_reports_message = lambda: ''
+# Suppress yt-dlp bug report messages
+yt_dlp.utils.bug_reports_message = lambda *args, **kwargs: ''
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
@@ -32,7 +34,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         'options': '-vn',
     }
 
-    ytdl = youtube_dl.YoutubeDL(YTDL_OPTIONS)
+    ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 
     def __init__(
         self,
@@ -117,8 +119,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             raise YTDLError(
                 f"Couldn't retrieve any matches for `{webpage_url}`"
             )
-        print('ASLAOSDOASD')
-        print(info)
+
         return cls(
             interaction,
             discord.FFmpegPCMAudio(info['webpage_url'], **cls.FFMPEG_OPTIONS),
