@@ -7,7 +7,7 @@ import yt_dlp
 from bot.exceptions import YTDLError
 
 # Suppress yt-dlp bug report messages
-yt_dlp.utils.bug_reports_message = lambda: ''
+yt_dlp.utils.bug_reports_message = lambda *args, **kwargs: ''
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
