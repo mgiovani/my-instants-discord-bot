@@ -2,7 +2,6 @@ import asyncio
 import math
 
 import discord
-from async_timeout import timeout
 from discord import app_commands
 from discord.ext import commands
 from loguru import logger
@@ -59,9 +58,9 @@ class VoiceState:
 
             if not self.loop:
                 try:
-                    async with timeout(180):  # 3 minutes
+                    async with asyncio.timeout(180):  # 3 minutes
                         self.current = await self.songs.get()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     await self.stop()
                     self.timed_out = True
                     return
@@ -293,18 +292,19 @@ class InstantClient(commands.Cog):
 
     @app_commands.command(name='mi', description='Play myinstants sound.')
     async def play(self, interaction: discord.Interaction, search: str):
-        voice_state = self.get_voice_state(interaction)
-
         if not interaction.user.voice or not interaction.user.voice.channel:
             return await interaction.response.send_message(
                 'You are not connected to any voice channel.', ephemeral=True
             )
 
+        # Defer immediately to avoid interaction timeout (3 second limit)
+        await interaction.response.defer()
+
+        voice_state = self.get_voice_state(interaction)
+
         if not voice_state.voice:
             channel = interaction.user.voice.channel
             voice_state.voice = await channel.connect()
-
-        await interaction.response.defer()
 
         async with interaction.channel.typing():
             try:

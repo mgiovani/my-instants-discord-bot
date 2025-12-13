@@ -1,10 +1,10 @@
-from python:3.9.0-slim-buster
-
+FROM python:3.12-slim-bookworm
 
 # OS dependencies
-RUN apt-get -y update
-RUN apt-get -y upgrade
-RUN apt-get install -y ffmpeg
+RUN apt-get -y update && \
+    apt-get -y upgrade && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
 # App dependencies
 COPY requirements.txt /app/

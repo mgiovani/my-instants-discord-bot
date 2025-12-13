@@ -82,7 +82,7 @@ class InstantsCrawler:
         try:
             views_div = soup.select_one(
                 '#instant-page-likes'
-            ).nextSibling.nextSibling
+            ).next_sibling.next_sibling
             return views_div.a.text
         except AttributeError:
             return 'Anonymous'
@@ -91,7 +91,7 @@ class InstantsCrawler:
         try:
             views_div = soup.select_one(
                 '#instant-page-likes'
-            ).nextSibling.nextSibling
+            ).next_sibling.next_sibling
             href_attr = views_div.a.attrs.get('href')
             return f'{self.BASE_URL}{href_attr}'
         except AttributeError:
@@ -101,7 +101,7 @@ class InstantsCrawler:
         try:
             views_div = soup.select_one(
                 '#instant-page-likes'
-            ).nextSibling.nextSibling
+            ).next_sibling.next_sibling
             return re.search(r'[\d,]+ *views', views_div.text).group(0)
         except AttributeError:
             return None
