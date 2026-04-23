@@ -182,3 +182,16 @@ async def test_help_is_ephemeral(cog):
     interaction.response.send_message.assert_awaited_once()
     call = interaction.response.send_message.await_args
     assert call.kwargs['ephemeral'] is True
+
+
+async def test_notify_sink_passes_embed_as_kwarg(cog, manager):
+    interaction = _interaction()
+    state = await cog._state_for(interaction)
+    import discord
+
+    embed = discord.Embed(title='t', description='d')
+    await state._notify(embed)
+    interaction.channel.send.assert_awaited_once()
+    call = interaction.channel.send.await_args
+    assert call.kwargs.get('embed') is embed
+    assert not call.args

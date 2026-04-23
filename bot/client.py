@@ -44,7 +44,12 @@ class InstantClient(commands.Cog):
         state = await self.voice_states.get_or_create(interaction.guild_id)
         channel = interaction.channel
         if channel is not None and hasattr(channel, 'send'):
-            state.set_now_playing_sink(channel.send)  # type: ignore[assignment]
+            send = channel.send
+
+            async def notify(embed: discord.Embed) -> None:
+                await send(embed=embed)
+
+            state.set_now_playing_sink(notify)
         return state
 
     def _require_voice_channel(
