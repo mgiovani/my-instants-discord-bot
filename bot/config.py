@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     skip_vote_threshold: int = Field(default=3, ge=1, le=20)
     queue_page_size: int = Field(default=10, ge=1, le=25)
     default_volume: float = Field(default=0.5, ge=0.0, le=1.0)
-    loop_max_iterations: int = Field(default=20, ge=1, le=1000)
+    loop_max_iterations: int = Field(default=50, ge=1, le=1000)
     fallback_thumbnail_url: str = (
         'https://images-na.ssl-images-amazon.com/images/I/61LNAo2K9RL.png'
     )
