@@ -7,8 +7,7 @@ license = { text = 'MIT' }
 requires-python = '>=3.12,<3.14'
 authors = [{ name = 'Giovani Moutinho', email = 'e@giovani.dev' }]
 dependencies = [
-    'discord-py~=2.6',
-    'PyNaCl~=1.5',
+    'discord-py[voice]>=2.7.1,<2.8',
     'yt-dlp>=2025.1.15',
     'beautifulsoup4~=4.13',
     'aiohttp~=3.11',

@@ -142,13 +142,12 @@ def main() -> None:
     settings = get_settings()
     configure_logging(settings)
     configure_sentry(settings)
-    token = settings.bot_token.get_secret_value()
-    if not token:
+    if not settings.bot_token.get_secret_value():
         raise MissingBotToken(
             'MYINSTANTS_BOT_TOKEN is required; see env.example'
         )
     bot = MyInstantsBot(settings)
-    bot.run(token, log_handler=None)
+    bot.run(settings.bot_token.get_secret_value(), log_handler=None)
 
 
 if __name__ == '__main__':

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -10,6 +11,21 @@ from loguru import logger
 
 if TYPE_CHECKING:
     from bot.config import Settings
+
+
+class _InterceptHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            level = logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+        frame, depth = logging.currentframe(), 2
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+        logger.opt(depth=depth, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
 
 
 def configure_logging(settings: Settings) -> None:
@@ -28,8 +44,20 @@ def configure_logging(settings: Settings) -> None:
                 '<cyan>{name}</cyan>:<cyan>{function}</cyan>:'
                 '<cyan>{line}</cyan> - <level>{message}</level>'
             ),
+            backtrace=False,
+            diagnose=False,
             enqueue=False,
         )
+    logging.basicConfig(
+        handlers=[_InterceptHandler()], level=logging.WARNING, force=True
+    )
+    for name in ('discord.voice_client', 'discord.voice_state'):
+        lg = logging.getLogger(name)
+        lg.handlers = [_InterceptHandler()]
+        lg.propagate = False
+        lg.setLevel(logging.DEBUG)
+    logging.getLogger('discord').setLevel(logging.WARNING)
+    logging.getLogger('discord.gateway').setLevel(logging.WARNING)
 
 
 def _json_sink(message: object) -> None:
@@ -72,6 +100,7 @@ def configure_sentry(settings: Settings) -> None:
         environment=settings.environment,
         traces_sample_rate=settings.sentry_traces_sample_rate,
         attach_stacktrace=True,
+        include_local_variables=False,
     )
     logger.info(
         'Sentry initialised for environment={env}',
