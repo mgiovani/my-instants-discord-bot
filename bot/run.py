@@ -9,7 +9,7 @@ from discord import Activity, ActivityType, Intents
 from discord.ext import commands
 from loguru import logger
 
-from bot.client import InstantClient
+from bot.commands import HelpCog, PlaybackCog, QueueCog
 from bot.config import get_settings
 from bot.db import (
     GuildSettingsRepository,
@@ -79,14 +79,15 @@ class MyInstantsBot(commands.Bot):
             GuildSettingsRepository(get_session_factory())
         )
 
-        await self.add_cog(
-            InstantClient(
-                self,
-                settings=self.settings,
-                crawler=self.crawler,
-                voice_states=self.voice_states,
+        for cog_cls in (PlaybackCog, QueueCog, HelpCog):
+            await self.add_cog(
+                cog_cls(
+                    self,
+                    settings=self.settings,
+                    crawler=self.crawler,
+                    voice_states=self.voice_states,
+                )
             )
-        )
         await self._sync_commands()
         self._install_signal_handlers()
 
