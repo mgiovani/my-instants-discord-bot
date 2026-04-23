@@ -13,6 +13,12 @@ from bot.client import InstantClient
 from bot.config import get_settings
 from bot.errors import install_error_handler
 from bot.exceptions import MissingBotToken
+from bot.logging_setup import (
+    capture_exception,
+    configure_logging,
+    configure_sentry,
+    start_heartbeat,
+)
 from bot.voice import GuildVoiceStateManager
 from crawler.instants import InstantsCrawler
 
@@ -47,9 +53,11 @@ class MyInstantsBot(commands.Bot):
             search_limit=settings.search_result_limit,
         )
         self.voice_states = GuildVoiceStateManager(settings)
+        self._heartbeat = None
 
     async def setup_hook(self) -> None:
-        install_error_handler(self.tree)
+        install_error_handler(self.tree, sentry_capture=_sentry_capture_async)
+        self._heartbeat = start_heartbeat(self.settings)
         await self.add_cog(
             InstantClient(
                 self,
@@ -95,6 +103,8 @@ class MyInstantsBot(commands.Bot):
 
     async def _shutdown(self, sig: signal.Signals) -> None:
         logger.info('Received {sig}, shutting down', sig=sig.name)
+        if self._heartbeat is not None:
+            self._heartbeat.cancel()
         await self.voice_states.close_all()
         await self.crawler.aclose()
         await self.close()
@@ -105,8 +115,14 @@ class MyInstantsBot(commands.Bot):
             logger.info('Logged in as {user} ({user_id})', user=user, user_id=user.id)
 
 
+def _sentry_capture_async(error: BaseException) -> None:
+    capture_exception(error)
+
+
 def main() -> None:
     settings = get_settings()
+    configure_logging(settings)
+    configure_sentry(settings)
     token = settings.bot_token.get_secret_value()
     if not token:
         raise MissingBotToken(
