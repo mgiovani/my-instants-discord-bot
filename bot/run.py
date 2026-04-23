@@ -11,6 +11,7 @@ from loguru import logger
 
 from bot.client import InstantClient
 from bot.config import get_settings
+from bot.db import close_engine, create_engine, run_migrations
 from bot.errors import install_error_handler
 from bot.exceptions import MissingBotToken
 from bot.logging_setup import (
@@ -58,6 +59,10 @@ class MyInstantsBot(commands.Bot):
     async def setup_hook(self) -> None:  # type: ignore[override]
         install_error_handler(self.tree, sentry_capture=_sentry_capture_async)
         self._heartbeat = start_heartbeat(self.settings)
+
+        engine = create_engine(self.settings)
+        await run_migrations(engine)
+
         await self.add_cog(
             InstantClient(
                 self,
@@ -107,6 +112,7 @@ class MyInstantsBot(commands.Bot):
             self._heartbeat.cancel()
         await self.voice_states.close_all()
         await self.crawler.aclose()
+        await close_engine()
         await self.close()
 
     async def on_ready(self) -> None:

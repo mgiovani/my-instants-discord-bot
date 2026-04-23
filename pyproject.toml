@@ -91,7 +91,7 @@ ignore = [
     'PLC0415',  # local imports are fine for isolating test helpers
     'E501',
 ]
-'bot/db/migrations/**/*.py' = ['ANN', 'I']
+'bot/db/migrations/**/*.py' = ['ANN', 'I', 'E501', 'UP', 'F401', 'W291']
 
 [tool.ruff.format]
 quote-style = 'single'
