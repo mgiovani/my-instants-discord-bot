@@ -50,12 +50,8 @@ async def test_shuffle_preserves_items():
     for name in ('a', 'b', 'c', 'd'):
         await queue.put(_song(name))
     queue.shuffle()
-    assert sorted(song.source.title for song in queue) == [
-        'a',
-        'b',
-        'c',
-        'd',
-    ]
+    titles: list[str] = [str(song.source.title) for song in queue]
+    assert sorted(titles) == ['a', 'b', 'c', 'd']
 
 
 async def test_clear_empties_queue():

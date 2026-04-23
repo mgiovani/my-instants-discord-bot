@@ -10,8 +10,8 @@ from loguru import logger
 
 from bot.exceptions import (
     EmptyQueueError,
-    NotInVoiceError,
     NothingPlayingError,
+    NotInVoiceError,
 )
 from bot.song import Song
 from bot.ytdl import YTDLSource
@@ -55,7 +55,9 @@ class InstantClient(commands.Cog):
         if voice is None or voice.channel is None:
             raise NotInVoiceError
         channel = voice.channel
-        if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+        if not isinstance(
+            channel, (discord.VoiceChannel, discord.StageChannel)
+        ):
             raise NotInVoiceError
         return channel
 
@@ -105,9 +107,7 @@ class InstantClient(commands.Cog):
         state.volume = volume / 100
         if state.current is not None:
             state.current.source.volume = state.volume
-        await interaction.response.send_message(
-            f'Volume set to {volume}%.'
-        )
+        await interaction.response.send_message(f'Volume set to {volume}%.')
 
     @app_commands.command(
         name='now', description='Show the currently playing sound.'
@@ -187,9 +187,7 @@ class InstantClient(commands.Cog):
 
         lines = [
             f'`{idx + 1}.` [**{song.source.title}**]({song.source.url})'
-            for idx, song in enumerate(
-                state.songs[start:end], start=start
-            )
+            for idx, song in enumerate(state.songs[start:end], start=start)
         ]
         embed = discord.Embed(
             description=f'**{total} sound(s):**\n\n' + '\n'.join(lines),
@@ -254,9 +252,7 @@ class InstantClient(commands.Cog):
         await interaction.followup.send(f'Enqueued {source!s}.')
 
     @app_commands.command(name='help', description='List commands.')
-    async def help_command(
-        self, interaction: discord.Interaction
-    ) -> None:
+    async def help_command(self, interaction: discord.Interaction) -> None:
         lines = [
             ('/mi <search>', 'Play a sound from MyInstants.'),
             ('/leave', 'Disconnect the bot from the voice channel.'),
@@ -272,9 +268,7 @@ class InstantClient(commands.Cog):
         ]
         embed = discord.Embed(
             title='Command List',
-            description='\n'.join(
-                f'**{cmd}**: {desc}' for cmd, desc in lines
-            ),
+            description='\n'.join(f'**{cmd}**: {desc}' for cmd, desc in lines),
             color=discord.Color.blue(),
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING
 
 import discord
 from loguru import logger
@@ -13,8 +14,8 @@ if TYPE_CHECKING:
     from bot.song import Song
 
 
-ReapCallback: TypeAlias = Callable[[int], Awaitable[None]]
-NowPlayingSink: TypeAlias = Callable[[discord.Embed], Awaitable[None]]
+type ReapCallback = Callable[[int], Awaitable[None]]
+type NowPlayingSink = Callable[[discord.Embed], Awaitable[None]]
 
 
 class GuildVoiceState:
@@ -80,10 +81,8 @@ class GuildVoiceState:
         task = self._task
         if task is not None and not task.done():
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
-            except (asyncio.CancelledError, Exception):  # noqa: BLE001
-                pass
         await self._disconnect()
 
     async def _disconnect(self) -> None:
@@ -94,7 +93,7 @@ class GuildVoiceState:
             self.voice = None
             try:
                 await voice.disconnect(force=False)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     'Error disconnecting voice for guild {guild_id}: {exc}',
                     guild_id=self.guild_id,
@@ -119,7 +118,7 @@ class GuildVoiceState:
             song.source.volume = self.volume
             try:
                 await self._play_current(song, announce=not is_loop_replay)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.exception(
                     'Playback failed in guild {guild_id}: {exc}',
                     guild_id=self.guild_id,
@@ -151,7 +150,7 @@ class GuildVoiceState:
         if announce and self._notify is not None:
             try:
                 await self._notify(song.create_embed())
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning('now-playing embed failed: {exc}', exc=exc)
 
     def _on_after_play(self, error: Exception | None) -> None:

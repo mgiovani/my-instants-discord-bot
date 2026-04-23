@@ -52,9 +52,7 @@ async def test_unexpected_error_sends_generic_message_and_captures():
         captured.append(exc)
 
     boom = RuntimeError('boom')
-    await handle_app_command_error(
-        interaction, boom, sentry_capture=capture
-    )
+    await handle_app_command_error(interaction, boom, sentry_capture=capture)
 
     interaction.response.send_message.assert_awaited_once()
     assert captured == [boom]
@@ -72,7 +70,8 @@ async def test_command_invoke_error_is_unwrapped():
 
 
 @pytest.mark.parametrize(
-    ('error_cls',), [(NotInVoiceError,), (NothingPlayingError,), (EmptyQueueError,)]
+    ('error_cls',),
+    [(NotInVoiceError,), (NothingPlayingError,), (EmptyQueueError,)],
 )
 async def test_user_facing_errors_dont_reach_sentry(error_cls):
     interaction = _interaction(done=False)

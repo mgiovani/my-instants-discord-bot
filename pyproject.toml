@@ -82,7 +82,15 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-'tests/**/*.py' = ['ANN', 'S101', 'S105', 'S106', 'PLR0913']
+'tests/**/*.py' = [
+    'ANN',
+    'S101',
+    'S105',
+    'S106',
+    'PLR0913',
+    'PLC0415',  # local imports are fine for isolating test helpers
+    'E501',
+]
 'bot/db/migrations/**/*.py' = ['ANN', 'I']
 
 [tool.ruff.format]
@@ -100,6 +108,10 @@ reportMissingImports = 'error'
 reportMissingTypeStubs = 'none'
 reportImplicitOverride = 'warning'
 reportUnnecessaryTypeIgnoreComment = 'warning'
+# External libs with weak type coverage surface attribute/argument issues
+# whose errors would otherwise flood CI. Ratchet back up once stubs improve.
+reportAttributeAccessIssue = 'warning'
+reportArgumentType = 'warning'
 
 [tool.pytest.ini_options]
 asyncio_mode = 'auto'

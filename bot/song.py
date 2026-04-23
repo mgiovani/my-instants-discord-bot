@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import itertools
 import random
+from collections import deque
 from typing import TYPE_CHECKING, overload
 
 import discord
@@ -43,6 +44,9 @@ class Song:
 
 
 class SongQueue(asyncio.Queue[Song]):
+    # Tell pyright what asyncio.Queue stores internally.
+    _queue: deque[Song]
+
     @overload
     def __getitem__(self, item: int) -> Song: ...
 

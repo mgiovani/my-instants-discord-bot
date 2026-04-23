@@ -51,9 +51,7 @@ def _json_sink(message: object) -> None:
     payload: dict[str, object] = {
         'ts': record['time'].isoformat(),
         'level': record['level'].name,
-        'logger': (
-            f'{record["name"]}:{record["function"]}:{record["line"]}'
-        ),
+        'logger': (f'{record["name"]}:{record["function"]}:{record["line"]}'),
         'message': record['message'],
         **{str(k): _jsonable(v) for k, v in dict(extra).items()},
     }
@@ -75,7 +73,7 @@ def configure_sentry(settings: Settings) -> None:
     if settings.sentry_dsn is None:
         return
     try:
-        import sentry_sdk
+        import sentry_sdk  # noqa: PLC0415 — optional dep, import only if DSN set
     except ImportError:  # pragma: no cover
         logger.warning('SENTRY_DSN set but sentry_sdk not installed')
         return
@@ -85,13 +83,16 @@ def configure_sentry(settings: Settings) -> None:
         traces_sample_rate=settings.sentry_traces_sample_rate,
         attach_stacktrace=True,
     )
-    logger.info('Sentry initialised for environment={env}', env=settings.environment)
+    logger.info(
+        'Sentry initialised for environment={env}',
+        env=settings.environment,
+    )
 
 
 def capture_exception(error: BaseException) -> None:
     """Safe no-op if sentry_sdk isn't configured."""
     try:
-        import sentry_sdk
+        import sentry_sdk  # noqa: PLC0415 — optional dep
     except ImportError:  # pragma: no cover
         return
     sentry_sdk.capture_exception(error)
@@ -104,7 +105,7 @@ def start_heartbeat(settings: Settings) -> tasks.Loop:
 
     @tasks.loop(seconds=30)
     async def _beat() -> None:
-        path.touch()
+        path.touch()  # noqa: ASYNC240 — a single inode touch is fine
 
     _beat.start()
     return _beat

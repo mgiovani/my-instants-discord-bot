@@ -55,7 +55,7 @@ class MyInstantsBot(commands.Bot):
         self.voice_states = GuildVoiceStateManager(settings)
         self._heartbeat = None
 
-    async def setup_hook(self) -> None:
+    async def setup_hook(self) -> None:  # type: ignore[override]
         install_error_handler(self.tree, sentry_capture=_sentry_capture_async)
         self._heartbeat = start_heartbeat(self.settings)
         await self.add_cog(
@@ -112,7 +112,11 @@ class MyInstantsBot(commands.Bot):
     async def on_ready(self) -> None:
         user = self.user
         if user is not None:
-            logger.info('Logged in as {user} ({user_id})', user=user, user_id=user.id)
+            logger.info(
+                'Logged in as {user} ({user_id})',
+                user=user,
+                user_id=user.id,
+            )
 
 
 def _sentry_capture_async(error: BaseException) -> None:

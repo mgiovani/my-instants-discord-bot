@@ -19,7 +19,8 @@ from pathlib import Path
 def _path() -> Path:
     return Path(
         os.environ.get(
-            'MYINSTANTS_HEARTBEAT_FILE', '/tmp/myinstants-heartbeat'  # noqa: S108
+            'MYINSTANTS_HEARTBEAT_FILE',
+            '/tmp/myinstants-heartbeat',  # noqa: S108
         )
     )
 
@@ -34,9 +35,10 @@ def main() -> int:
         print(f'healthcheck: {heartbeat} missing', file=sys.stderr)
         return 1
     age = time.time() - heartbeat.stat().st_mtime
-    if age > _max_age_seconds():
+    max_age = _max_age_seconds()
+    if age > max_age:
         print(
-            f'healthcheck: heartbeat is {age:.0f}s old (> {_max_age_seconds():.0f}s)',
+            f'healthcheck: heartbeat is {age:.0f}s old (> {max_age:.0f}s)',
             file=sys.stderr,
         )
         return 1

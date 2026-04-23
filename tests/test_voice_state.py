@@ -95,7 +95,7 @@ async def test_reap_callback_removes_entry_from_manager(manager):
     state = await manager.get_or_create(17)
     assert manager.get(17) is state
     try:
-        await manager._reap(17)  # type: ignore[attr-defined]
+        await manager._reap(17)
         assert manager.get(17) is None
     finally:
         await state.close()

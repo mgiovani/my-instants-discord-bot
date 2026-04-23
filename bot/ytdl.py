@@ -92,7 +92,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         if callable(cleanup):
             try:
                 cleanup()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.debug(
                     'cleanup on replaced FFmpeg source failed: {exc}',
                     exc=exc,
@@ -142,5 +142,9 @@ def _spawn_ffmpeg(stream_url: str) -> discord.FFmpegPCMAudio:
             **_FFMPEG_OPTIONS,
         )
     except discord.ClientException as exc:
-        logger.error('FFmpeg could not start for {url}: {exc}', url=stream_url, exc=exc)
+        logger.error(
+            'FFmpeg could not start for {url}: {exc}',
+            url=stream_url,
+            exc=exc,
+        )
         raise YTDLError(f'FFmpeg failed to start: {exc}') from exc

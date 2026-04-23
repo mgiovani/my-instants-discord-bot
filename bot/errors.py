@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import TypeAlias
 
 import discord
 from discord import app_commands
@@ -9,9 +8,7 @@ from loguru import logger
 
 from bot.exceptions import MyInstantsBotError
 
-SentryCapture: TypeAlias = Callable[
-    [BaseException], Awaitable[None] | None
-]
+type SentryCapture = Callable[[BaseException], Awaitable[None] | None]
 
 
 def install_error_handler(
@@ -27,7 +24,7 @@ def install_error_handler(
             interaction, error, sentry_capture=sentry_capture
         )
 
-    tree.on_error = on_error  # type: ignore[method-assign]
+    tree.on_error = on_error
 
 
 async def handle_app_command_error(

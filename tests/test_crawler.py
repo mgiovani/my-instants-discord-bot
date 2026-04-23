@@ -56,7 +56,9 @@ async def test_search_returns_parsed_summaries(crawler, search_results_body):
 
     assert len(results) == 25
     assert results[0].name == 'Discord Notification'
-    assert results[0].page_url.startswith('https://www.myinstants.com/instant/')
+    assert results[0].page_url.startswith(
+        'https://www.myinstants.com/instant/'
+    )
     assert results[0].mp3_url == (
         'https://www.myinstants.com/media/sounds/discord-notification.mp3'
     )
@@ -75,7 +77,9 @@ async def test_first_match_returns_first_result(crawler, search_results_body):
 
 
 async def test_first_match_raises_when_no_results(crawler):
-    empty_html = b'<html><body><div class="nothing-to-see"></div></body></html>'
+    empty_html = (
+        b'<html><body><div class="nothing-to-see"></div></body></html>'
+    )
     with aioresponses() as mocked:
         mocked.get(
             'https://www.myinstants.com/search?name=nomatch',
