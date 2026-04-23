@@ -58,6 +58,9 @@ class MyInstantsBot(commands.Bot):
             timeout_seconds=settings.myinstants_timeout_seconds,
             connect_timeout_seconds=settings.myinstants_connect_timeout_seconds,
             search_limit=settings.search_result_limit,
+            search_ttl_seconds=settings.cache_search_ttl_seconds,
+            details_ttl_seconds=settings.cache_details_ttl_seconds,
+            rate_limit_per_sec=settings.myinstants_rate_limit_per_sec,
         )
         self.voice_states = GuildVoiceStateManager(settings)
         self._heartbeat = None
