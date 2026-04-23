@@ -6,10 +6,12 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from bot.privacy import hash_guild
 from bot.voice.state import GuildVoiceState
 
 if TYPE_CHECKING:
     from bot.config import Settings
+    from bot.db.repositories import GuildSettingsRepository
 
 
 class GuildVoiceStateManager:
@@ -18,24 +20,33 @@ class GuildVoiceStateManager:
     All lookups serialise through a per-guild `asyncio.Lock` to prevent
     two concurrent slash commands from creating duplicate states — the
     bug that caused double voice connects in production.
+
+    When a `GuildSettingsRepository` is provided, freshly-created states
+    have their idle timeout / skip threshold / default volume overridden
+    by any per-guild row; otherwise the config defaults are used.
     """
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        settings_repo: GuildSettingsRepository | None = None,
+    ) -> None:
         self._settings = settings
+        self._settings_repo = settings_repo
         self._states: dict[int, GuildVoiceState] = {}
         self._locks: defaultdict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._pending_close: set[asyncio.Task[None]] = set()
+
+    def attach_settings_repo(self, repo: GuildSettingsRepository) -> None:
+        """Inject the settings repo after `create_engine` has run."""
+        self._settings_repo = repo
 
     async def get_or_create(self, guild_id: int) -> GuildVoiceState:
         async with self._locks[guild_id]:
             state = self._states.get(guild_id)
             if state is None:
-                state = GuildVoiceState(
-                    guild_id=guild_id,
-                    idle_timeout_seconds=self._settings.idle_timeout_seconds,
-                    skip_vote_threshold=self._settings.skip_vote_threshold,
-                    default_volume=self._settings.default_volume,
-                    on_idle=self._reap,
-                )
+                state = await self._build_state(guild_id)
                 state.start()
                 self._states[guild_id] = state
                 logger.debug(
@@ -43,6 +54,38 @@ class GuildVoiceStateManager:
                     guild_id=guild_id,
                 )
             return state
+
+    def invalidate(self, guild_id: int) -> None:
+        """Drop cached state so the next access re-reads guild settings."""
+        state = self._states.pop(guild_id, None)
+        if state is not None:
+            task = asyncio.create_task(state.close())
+            self._pending_close.add(task)
+            task.add_done_callback(self._pending_close.discard)
+
+    async def _build_state(self, guild_id: int) -> GuildVoiceState:
+        idle_timeout = self._settings.idle_timeout_seconds
+        skip_threshold = self._settings.skip_vote_threshold
+        volume = self._settings.default_volume
+        if self._settings_repo is not None:
+            secret = self._settings.require_pii_hash_key().get_secret_value()
+            row = await self._settings_repo.get(
+                hash_guild(guild_id, secret=secret)
+            )
+            if row is not None:
+                if row.idle_timeout_seconds is not None:
+                    idle_timeout = row.idle_timeout_seconds
+                if row.skip_vote_threshold is not None:
+                    skip_threshold = row.skip_vote_threshold
+                if row.default_volume_pct is not None:
+                    volume = row.default_volume_pct / 100
+        return GuildVoiceState(
+            guild_id=guild_id,
+            idle_timeout_seconds=idle_timeout,
+            skip_vote_threshold=skip_threshold,
+            default_volume=volume,
+            on_idle=self._reap,
+        )
 
     def get(self, guild_id: int) -> GuildVoiceState | None:
         return self._states.get(guild_id)
