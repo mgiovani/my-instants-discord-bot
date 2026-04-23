@@ -26,11 +26,13 @@ class GuildVoiceState:
         idle_timeout_seconds: int,
         skip_vote_threshold: int,
         default_volume: float,
+        loop_max_iterations: int,
         on_idle: ReapCallback | None = None,
     ) -> None:
         self.guild_id = guild_id
         self.idle_timeout_seconds = idle_timeout_seconds
         self.skip_vote_threshold = skip_vote_threshold
+        self.loop_max_iterations = loop_max_iterations
         self.voice: discord.VoiceClient | None = None
         self.current: Song | None = None
         self.songs: SongQueue = SongQueue()
@@ -92,8 +94,19 @@ class GuildVoiceState:
 
     async def _player_loop(self) -> None:
         is_loop_replay = False
+        loop_iterations = 0
         while not self._closed.is_set():
             self._next_event.clear()
+            if is_loop_replay:
+                loop_iterations += 1
+                if loop_iterations > self.loop_max_iterations:
+                    self.loop_current = False
+                    loop_iterations = 0
+                    is_loop_replay = False
+                    await self._notify_loop_capped()
+            else:
+                loop_iterations = 0
+
             song = await self._next_song(is_loop_replay)
             if song is None:
                 await self._disconnect()
@@ -117,6 +130,26 @@ class GuildVoiceState:
                 self._next_event.set()
             await self._next_event.wait()
             is_loop_replay = self.loop_current and not self._closed.is_set()
+
+    async def _notify_loop_capped(self) -> None:
+        logger.info(
+            'Loop auto-disabled after {n} replays in guild {guild_id}',
+            n=self.loop_max_iterations,
+            guild_id=self.guild_id,
+        )
+        if self._notify is None:
+            return
+        embed = discord.Embed(
+            description=(
+                f'Loop auto-disabled after **{self.loop_max_iterations}** '
+                'replays. Run `/loop` again to re-enable.'
+            ),
+            color=discord.Color.orange(),
+        )
+        try:
+            await self._notify(embed)
+        except Exception as exc:
+            logger.warning('loop-cap notice failed: {exc}', exc=exc)
 
     async def _next_song(self, is_loop_replay: bool) -> Song | None:
         if is_loop_replay and self.current is not None:

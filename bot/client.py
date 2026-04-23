@@ -225,8 +225,13 @@ class InstantClient(commands.Cog):
         if not state.is_playing:
             raise NothingPlayingError
         state.loop_current = not state.loop_current
-        status = 'enabled' if state.loop_current else 'disabled'
-        await interaction.response.send_message(f'Loop is now {status}.')
+        if state.loop_current:
+            await interaction.response.send_message(
+                f'Loop enabled (auto-off after '
+                f'{state.loop_max_iterations} replays).'
+            )
+        else:
+            await interaction.response.send_message('Loop disabled.')
 
     @app_commands.command(name='mi', description='Play a MyInstants sound.')
     async def play(

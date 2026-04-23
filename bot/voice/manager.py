@@ -71,6 +71,7 @@ class GuildVoiceStateManager:
             idle_timeout_seconds=idle_timeout,
             skip_vote_threshold=skip_threshold,
             default_volume=volume,
+            loop_max_iterations=self._settings.loop_max_iterations,
             on_idle=self._reap,
         )
 

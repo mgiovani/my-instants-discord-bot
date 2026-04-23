@@ -16,6 +16,7 @@ def state(settings):
         idle_timeout_seconds=1,
         skip_vote_threshold=settings.skip_vote_threshold,
         default_volume=settings.default_volume,
+        loop_max_iterations=settings.loop_max_iterations,
     )
 
 
@@ -53,6 +54,7 @@ async def test_player_loop_reaps_on_timeout(settings):
         idle_timeout_seconds=0,  # immediate timeout
         skip_vote_threshold=settings.skip_vote_threshold,
         default_volume=settings.default_volume,
+        loop_max_iterations=settings.loop_max_iterations,
         on_idle=on_idle,
     )
     state.start()
@@ -99,3 +101,37 @@ async def test_reap_callback_removes_entry_from_manager(manager):
         assert manager.get(17) is None
     finally:
         await state.close()
+
+
+async def test_loop_auto_disables_after_cap_reached(settings):
+    notified = []
+
+    async def sink(embed):
+        notified.append(embed)
+
+    state = GuildVoiceState(
+        guild_id=9,
+        idle_timeout_seconds=3600,
+        skip_vote_threshold=settings.skip_vote_threshold,
+        default_volume=settings.default_volume,
+        loop_max_iterations=3,
+    )
+    state.set_now_playing_sink(sink)
+    state.loop_current = True
+
+    await state._notify_loop_capped()
+
+    assert len(notified) == 1
+    assert '3' in notified[0].description
+    assert 'auto-disabled' in notified[0].description.lower()
+
+
+async def test_loop_notify_is_noop_without_sink(settings):
+    state = GuildVoiceState(
+        guild_id=11,
+        idle_timeout_seconds=3600,
+        skip_vote_threshold=settings.skip_vote_threshold,
+        default_volume=settings.default_volume,
+        loop_max_iterations=5,
+    )
+    await state._notify_loop_capped()
