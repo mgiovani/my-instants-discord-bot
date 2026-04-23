@@ -105,14 +105,15 @@ class InstantsCrawler:
         return BeautifulSoup(body, 'html.parser')
 
     async def search(self, query: str) -> list[InstantSummary]:
-        key = query.strip().lower()
+        cleaned = query.strip()
+        key = cleaned.lower()
         cached = await self._search_cache.get(key)
         if cached is not None:
             logger.debug('Cache hit: search {key!r}', key=key)
             return cached
-        logger.debug('Searching myinstants for {query!r}', query=query)
+        logger.debug('Searching myinstants for {query!r}', query=cleaned)
         soup = await self._fetch_soup(
-            f'{_BASE_URL}/search?name={query}',
+            f'{_BASE_URL}/search?name={cleaned}',
         )
         instants = soup.select('.instant')[: self._search_limit]
         results = [self._parse_summary(tag) for tag in instants]
