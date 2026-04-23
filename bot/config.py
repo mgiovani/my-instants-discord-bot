@@ -47,8 +47,8 @@ class Settings(BaseSettings):
         default=5.0, ge=1.0, le=30.0
     )
     myinstants_rate_limit_per_sec: float = Field(default=5.0, ge=0.1, le=50.0)
-    cache_search_ttl_seconds: int = Field(default=600, ge=0, le=86400)
-    cache_details_ttl_seconds: int = Field(default=3600, ge=0, le=86400)
+    cache_search_ttl_seconds: int = Field(default=600, ge=1, le=86400)
+    cache_details_ttl_seconds: int = Field(default=3600, ge=1, le=86400)
 
     database_url: str = Field(
         default='sqlite+aiosqlite:///./data/bot.db',

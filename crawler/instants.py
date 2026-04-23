@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import aiohttp
+from aiocache import BaseCache, Cache
+from aiolimiter import AsyncLimiter
 from bs4 import BeautifulSoup, Tag
 from loguru import logger
 
@@ -60,6 +62,9 @@ class InstantsCrawler:
         timeout_seconds: float = 10.0,
         connect_timeout_seconds: float = 5.0,
         search_limit: int = 25,
+        search_ttl_seconds: int = 600,
+        details_ttl_seconds: int = 3600,
+        rate_limit_per_sec: float = 5.0,
     ) -> None:
         self._owns_session = session is None
         self._timeout = aiohttp.ClientTimeout(
@@ -68,6 +73,13 @@ class InstantsCrawler:
         )
         self._session = session
         self._search_limit = search_limit
+        self._search_cache: BaseCache = Cache(
+            Cache.MEMORY, ttl=search_ttl_seconds
+        )
+        self._details_cache: BaseCache = Cache(
+            Cache.MEMORY, ttl=details_ttl_seconds
+        )
+        self._limiter = AsyncLimiter(max(rate_limit_per_sec, 0.1), 1.0)
 
     async def aclose(self) -> None:
         if self._owns_session and self._session is not None:
@@ -82,7 +94,10 @@ class InstantsCrawler:
     async def _fetch_soup(self, url: str) -> BeautifulSoup:
         session = await self._get_session()
         try:
-            async with session.get(url, timeout=self._timeout) as response:
+            async with (
+                self._limiter,
+                session.get(url, timeout=self._timeout) as response,
+            ):
                 response.raise_for_status()
                 body = await response.read()
         except aiohttp.ClientError as exc:
@@ -90,12 +105,20 @@ class InstantsCrawler:
         return BeautifulSoup(body, 'html.parser')
 
     async def search(self, query: str) -> list[InstantSummary]:
-        logger.debug('Searching myinstants for {query!r}', query=query)
+        cleaned = query.strip()
+        key = cleaned.lower()
+        cached = await self._search_cache.get(key)
+        if cached is not None:
+            logger.debug('Cache hit: search {key!r}', key=key)
+            return cached
+        logger.debug('Searching myinstants for {query!r}', query=cleaned)
         soup = await self._fetch_soup(
-            f'{_BASE_URL}/search?name={query}',
+            f'{_BASE_URL}/search?name={cleaned}',
         )
         instants = soup.select('.instant')[: self._search_limit]
-        return [self._parse_summary(tag) for tag in instants]
+        results = [self._parse_summary(tag) for tag in instants]
+        await self._search_cache.set(key, results)
+        return results
 
     async def first_match(self, query: str) -> InstantSummary:
         results = await self.search(query)
@@ -104,8 +127,13 @@ class InstantsCrawler:
         return results[0]
 
     async def get_details(self, instant: InstantSummary) -> InstantDetails:
+        key = instant.page_url
+        cached = await self._details_cache.get(key)
+        if cached is not None:
+            logger.debug('Cache hit: details {key!r}', key=key)
+            return cached
         soup = await self._fetch_soup(instant.page_url)
-        return InstantDetails(
+        details = InstantDetails(
             title=_safe_text(soup.select_one('#instant-page-title')),
             description=_safe_text(
                 soup.select_one('#instant-page-description p')
@@ -115,6 +143,8 @@ class InstantsCrawler:
             uploader_url=_parse_uploader_url(soup),
             views=_parse_views(soup),
         )
+        await self._details_cache.set(key, details)
+        return details
 
     def _parse_summary(self, tag: Tag) -> InstantSummary:
         name_el = tag.select_one('.instant-link')
