@@ -67,7 +67,11 @@ class MyInstantsBot(commands.Bot):
         self._heartbeat = start_heartbeat(self.settings)
 
         engine = create_engine(self.settings)
-        await run_migrations(engine)
+        try:
+            await run_migrations(engine)
+        except Exception:
+            await close_engine()
+            raise
         self.voice_states.attach_settings_repo(
             GuildSettingsRepository(get_session_factory())
         )
