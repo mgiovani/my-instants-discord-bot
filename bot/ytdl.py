@@ -1,153 +1,142 @@
+from __future__ import annotations
+
 import asyncio
 import functools
+import subprocess
+from typing import TYPE_CHECKING, Any
 
 import discord
 import yt_dlp
+from loguru import logger
 
 from bot.exceptions import YTDLError
 
-# Suppress yt-dlp bug report messages
-yt_dlp.utils.bug_reports_message = lambda *args, **kwargs: ''
+if TYPE_CHECKING:
+    from bot.config import Settings
+    from crawler.instants import InstantDetails
+
+yt_dlp.utils.bug_reports_message = lambda *_args, **_kwargs: ''
+
+
+_YTDL_OPTIONS: dict[str, Any] = {
+    'format': 'bestaudio/best',
+    'noplaylist': True,
+    'nocheckcertificate': True,
+    'ignoreerrors': False,
+    'logtostderr': False,
+    'quiet': True,
+    'no_warnings': True,
+    'default_search': 'auto',
+}
+
+
+_FFMPEG_OPTIONS: dict[str, str] = {
+    'before_options': (
+        '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
+    ),
+    'options': '-vn',
+}
+
+
+_ytdl = yt_dlp.YoutubeDL(_YTDL_OPTIONS)
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
-    YTDL_OPTIONS = {
-        'format': 'bestaudio/best',
-        'extractaudio': True,
-        'audioformat': 'mp3',
-        'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
-        'restrictfilenames': True,
-        'noplaylist': True,
-        'nocheckcertificate': True,
-        'ignoreerrors': False,
-        'logtostderr': False,
-        'quiet': True,
-        'no_warnings': True,
-        'default_search': 'auto',
-        'source_address': '0.0.0.0',
-    }
-
-    FFMPEG_OPTIONS = {
-        'before_options': (
-            '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
-        ),
-        'options': '-vn',
-    }
-
-    ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
-
     def __init__(
         self,
-        interaction: discord.Interaction,
-        source: discord.FFmpegPCMAudio,
         *,
-        data: dict,
+        interaction: discord.Interaction,
+        stream_url: str,
+        data: dict[str, Any],
         volume: float = 0.5,
-    ):
-        super().__init__(source, volume)
-
+    ) -> None:
+        super().__init__(_spawn_ffmpeg(stream_url), volume=volume)
+        self.stream_url = stream_url
         self.requester = interaction.user
         self.channel = interaction.channel
         self.data = data
 
-        self.uploader = data.get('uploader_name')
-        self.uploader_url = data.get('uploader_url')
-        self.description = data.get('description')
-        self.title = data.get('title')
-        self.url = data.get('webpage_url')
-        self.views = data.get('views')
-        self.likes = data.get('likes')
-        self.thumbnail = data.get(
-            'thumbnail',
+        self.uploader: str | None = data.get('uploader_name')
+        self.uploader_url: str | None = data.get('uploader_url')
+        self.description: str | None = data.get('description')
+        self.title: str | None = data.get('title')
+        self.url: str | None = data.get('webpage_url') or stream_url
+        self.views: str | None = data.get('views')
+        self.likes: str | None = data.get('likes')
+        self.thumbnail: str = data.get('thumbnail') or data.get(
+            'fallback_thumbnail',
             'https://images-na.ssl-images-amazon.com/images/I/61LNAo2K9RL.png',
         )
-        date = data.get('upload_date')
-        self.upload_date = (
-            f'{date[0:4]}-{date[4:6]}-{date[6:8]}' if date else None
+        upload_date: str | None = data.get('upload_date')
+        self.upload_date: str | None = (
+            f'{upload_date[0:4]}-{upload_date[4:6]}-{upload_date[6:8]}'
+            if upload_date
+            else None
         )
 
-    def __str__(self):
-        return '**{0.title}** by **{0.uploader}**'.format(self)
+    def __str__(self) -> str:
+        return f'**{self.title}** by **{self.uploader}**'
 
-    @classmethod
-    async def create_source(
-        cls,
-        interaction: discord.Interaction,
-        search: str,
-        *,
-        loop: asyncio.BaseEventLoop = None,
-    ):
-        loop = loop or asyncio.get_event_loop()
-        partial = functools.partial(
-            cls.ytdl.extract_info, search, download=False, process=False
-        )
-        data = await loop.run_in_executor(None, partial)
-
-        if data is None:
-            raise YTDLError(f"Couldn't find anything that matches `{search}`")
-
-        if 'entries' not in data:
-            process_info = data
-        else:
-            process_info = next(
-                (entry for entry in data['entries'] if entry), None
-            )
-
-            if process_info is None:
-                raise YTDLError(
-                    f"Couldn't find anything that matches `{search}`"
+    def reset_stream(self) -> None:
+        previous = self.original
+        self.original = _spawn_ffmpeg(self.stream_url)
+        cleanup = getattr(previous, 'cleanup', None)
+        if callable(cleanup):
+            try:
+                cleanup()
+            except Exception as exc:
+                logger.debug(
+                    'cleanup on replaced FFmpeg source failed: {exc}',
+                    exc=exc,
                 )
-
-        webpage_url = process_info['webpage_url']
-        partial = functools.partial(
-            cls.ytdl.extract_info, webpage_url, download=False
-        )
-        processed_info = await loop.run_in_executor(None, partial)
-
-        if processed_info is None:
-            raise YTDLError(f"Couldn't fetch `{webpage_url}`")
-
-        info = (
-            processed_info
-            if 'entries' not in processed_info
-            else next(
-                (entry for entry in processed_info['entries'] if entry), None
-            )
-        )
-
-        if info is None:
-            raise YTDLError(
-                f"Couldn't retrieve any matches for `{webpage_url}`"
-            )
-
-        return cls(
-            interaction,
-            discord.FFmpegPCMAudio(info['webpage_url'], **cls.FFMPEG_OPTIONS),
-            data=info,
-        )
 
     @classmethod
     async def from_url(
         cls,
         interaction: discord.Interaction,
         url: str,
-        instant_details,
+        instant_details: InstantDetails,
         *,
-        loop: asyncio.BaseEventLoop = None,
-    ):
-        loop = loop or asyncio.get_event_loop()
-        partial = functools.partial(
-            cls.ytdl.extract_info, url, download=False, process=False
+        settings: Settings,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> YTDLSource:
+        loop = loop or asyncio.get_running_loop()
+        extractor = functools.partial(
+            _ytdl.extract_info, url, download=False, process=False
         )
-        info = await loop.run_in_executor(None, partial)
+        try:
+            info = await loop.run_in_executor(None, extractor)
+        except yt_dlp.utils.DownloadError as exc:
+            raise YTDLError(f'Could not fetch {url}: {exc}') from exc
 
         if info is None:
-            raise YTDLError(f"Couldn't fetch `{url}`")
+            raise YTDLError(f'Could not fetch {url}')
 
-        # Merge instant details with the extracted info
-        info.update(instant_details)
-        return cls(
-            interaction,
-            discord.FFmpegPCMAudio(info['webpage_url'], **cls.FFMPEG_OPTIONS),
-            data=info,
+        merged: dict[str, Any] = {**info, **instant_details.to_ytdl_data()}
+        merged.setdefault('webpage_url', url)
+        merged.setdefault(
+            'fallback_thumbnail', settings.fallback_thumbnail_url
         )
+
+        return cls(
+            interaction=interaction,
+            stream_url=url,
+            data=merged,
+            volume=settings.default_volume,
+        )
+
+
+def _spawn_ffmpeg(stream_url: str) -> discord.FFmpegPCMAudio:
+    try:
+        return discord.FFmpegPCMAudio(
+            stream_url,
+            stderr=subprocess.PIPE,
+            **_FFMPEG_OPTIONS,
+        )
+    except discord.ClientException as exc:
+        logger.error(
+            'FFmpeg could not start for {url}: {exc}',
+            url=stream_url,
+            exc=exc,
+        )
+        raise YTDLError(f'FFmpeg failed to start: {exc}') from exc

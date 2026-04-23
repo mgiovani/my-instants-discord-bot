@@ -1,10 +1,25 @@
 services:
   myinstants-bot:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: myinstants-bot:latest
+    image: ${MYINSTANTS_IMAGE:-ghcr.io/mgiovani/my-instants-discord-bot:latest}
     restart: always
+    stop_grace_period: 15s
+    mem_limit: 512m
+    cpus: '1.0'
     environment:
-      - MYINSTANTS_BOT_TOKEN=${MYINSTANTS_BOT_TOKEN}
-      - LOGURU_FORMAT="{time} | <lvl>{message}</lvl>"
+      MYINSTANTS_BOT_TOKEN: ${MYINSTANTS_BOT_TOKEN}
+      MYINSTANTS_ENV: ${MYINSTANTS_ENV:-prod}
+      MYINSTANTS_LOG_FORMAT: ${MYINSTANTS_LOG_FORMAT:-json}
+      MYINSTANTS_LOG_LEVEL: ${MYINSTANTS_LOG_LEVEL:-INFO}
+      MYINSTANTS_PII_HASH_KEY: ${MYINSTANTS_PII_HASH_KEY}
+      MYINSTANTS_SENTRY_DSN: ${MYINSTANTS_SENTRY_DSN:-}
+      MYINSTANTS_DATABASE_URL: sqlite+aiosqlite:////data/bot.db
+    volumes:
+      - bot-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+volumes:
+  bot-data:

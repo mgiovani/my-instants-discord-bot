@@ -1,27 +1,61 @@
 name: Deploy
 
 on:
-  push:
-    branches: [ main ]
+  workflow_run:
+    workflows: [Build image]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to deploy (e.g. sha-abc1234 or v1.2.3)'
+        required: false
+        default: 'latest'
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    environment: production
     steps:
-      - name: Deploy
-        uses: appleboy/ssh-action@master
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            echo "tag=${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            SHA="${{ github.event.workflow_run.head_sha }}"
+            echo "tag=sha-${SHA:0:7}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy via SSH + docker compose pull
+        uses: appleboy/ssh-action@v1.2.0
         env:
+          IMAGE_TAG: ${{ steps.tag.outputs.tag }}
           MYINSTANTS_BOT_TOKEN: ${{ secrets.MYINSTANTS_BOT_TOKEN }}
+          MYINSTANTS_PII_HASH_KEY: ${{ secrets.MYINSTANTS_PII_HASH_KEY }}
+          MYINSTANTS_SENTRY_DSN: ${{ secrets.MYINSTANTS_SENTRY_DSN }}
         with:
-          envs: MYINSTANTS_BOT_TOKEN
+          envs: IMAGE_TAG,MYINSTANTS_BOT_TOKEN,MYINSTANTS_PII_HASH_KEY,MYINSTANTS_SENTRY_DSN
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           script: |
+            set -euo pipefail
             cd ~/my-instants-discord-bot
-            git pull
-            export MYINSTANTS_BOT_TOKEN=$MYINSTANTS_BOT_TOKEN
-            docker compose -f compose.yml build
-            docker compose -f compose.yml up -d
+            git fetch --depth=1 origin main
+            git checkout -q origin/main -- compose.yml
+            export MYINSTANTS_IMAGE="ghcr.io/mgiovani/my-instants-discord-bot:${IMAGE_TAG}"
+            echo "Deploying ${MYINSTANTS_IMAGE}"
+            echo "${GITHUB_TOKEN:-}" | docker login ghcr.io -u mgiovani --password-stdin || true
+            docker compose pull
+            docker compose up -d --wait --remove-orphans
+            docker image prune -f --filter "until=24h"
