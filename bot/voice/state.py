@@ -19,16 +19,6 @@ type NowPlayingSink = Callable[[discord.Embed], Awaitable[None]]
 
 
 class GuildVoiceState:
-    """Per-guild playback state.
-
-    The background `_player_loop` pulls the next song (blocking on the
-    queue with a timeout) and plays it on the guild's voice client. When
-    the queue stays empty for `idle_timeout_seconds`, the loop asks the
-    manager to reap this state and returns. Exceptions inside the play
-    iteration are logged and the loop continues so transient failures
-    don't leave the guild in a zombie state.
-    """
-
     def __init__(
         self,
         *,

@@ -1,10 +1,3 @@
-"""Async SQLAlchemy + aiosqlite persistence layer.
-
-See `bot/db/models.py` for tables, `bot/db/repositories.py` for the
-domain-friendly API, and `alembic.ini` + `bot/db/migrations/` for the
-schema migration history.
-"""
-
 from bot.db.engine import (
     close_engine,
     create_engine,

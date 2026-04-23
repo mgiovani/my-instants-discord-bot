@@ -65,7 +65,6 @@ async def test_command_invoke_error_is_unwrapped():
     )
     await handle_app_command_error(interaction, wrapped)
     call = interaction.response.send_message.await_args
-    # Should show the NothingPlaying user_message, not the wrapper's repr
     assert NothingPlayingError.user_message in call.args[0]
 
 

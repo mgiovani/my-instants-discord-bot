@@ -10,7 +10,6 @@ from discord.ext import commands
 from loguru import logger
 
 from bot.client import InstantClient
-from bot.commands.settings import SettingsCog
 from bot.config import get_settings
 from bot.db import (
     GuildSettingsRepository,
@@ -69,23 +68,15 @@ class MyInstantsBot(commands.Bot):
 
         engine = create_engine(self.settings)
         await run_migrations(engine)
-        factory = get_session_factory()
-        settings_repo = GuildSettingsRepository(factory)
-        self.voice_states.attach_settings_repo(settings_repo)
+        self.voice_states.attach_settings_repo(
+            GuildSettingsRepository(get_session_factory())
+        )
 
         await self.add_cog(
             InstantClient(
                 self,
                 settings=self.settings,
                 crawler=self.crawler,
-                voice_states=self.voice_states,
-            )
-        )
-        await self.add_cog(
-            SettingsCog(
-                self,
-                settings=self.settings,
-                repo=settings_repo,
                 voice_states=self.voice_states,
             )
         )

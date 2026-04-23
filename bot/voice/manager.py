@@ -15,17 +15,6 @@ if TYPE_CHECKING:
 
 
 class GuildVoiceStateManager:
-    """Owns the lifecycle of `GuildVoiceState` instances per guild.
-
-    All lookups serialise through a per-guild `asyncio.Lock` to prevent
-    two concurrent slash commands from creating duplicate states — the
-    bug that caused double voice connects in production.
-
-    When a `GuildSettingsRepository` is provided, freshly-created states
-    have their idle timeout / skip threshold / default volume overridden
-    by any per-guild row; otherwise the config defaults are used.
-    """
-
     def __init__(
         self,
         settings: Settings,
@@ -39,7 +28,6 @@ class GuildVoiceStateManager:
         self._pending_close: set[asyncio.Task[None]] = set()
 
     def attach_settings_repo(self, repo: GuildSettingsRepository) -> None:
-        """Inject the settings repo after `create_engine` has run."""
         self._settings_repo = repo
 
     async def get_or_create(self, guild_id: int) -> GuildVoiceState:
@@ -56,7 +44,6 @@ class GuildVoiceStateManager:
             return state
 
     def invalidate(self, guild_id: int) -> None:
-        """Drop cached state so the next access re-reads guild settings."""
         state = self._states.pop(guild_id, None)
         if state is not None:
             task = asyncio.create_task(state.close())

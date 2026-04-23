@@ -41,7 +41,6 @@ async def test_guild_settings_upsert_and_read(session_factory):
     assert row.idle_timeout_seconds == 600
     assert row.skip_vote_threshold == 5
 
-    # Second upsert replaces partial values without clobbering others
     await repo.upsert('g1', idle_timeout_seconds=900)
     row = await repo.get('g1')
     assert row is not None

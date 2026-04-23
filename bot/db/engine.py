@@ -1,10 +1,3 @@
-"""DB engine + session lifecycle.
-
-The engine factory is called once at boot. We keep a module-level
-singleton for process-wide reuse; tests bypass this by calling
-`create_engine(url=...)` directly with an in-memory SQLite URL.
-"""
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -34,7 +27,7 @@ def create_engine(
     url: str | None = None,
     echo: bool = False,
 ) -> AsyncEngine:
-    global _engine, _session_factory  # noqa: PLW0603 — process-wide singleton
+    global _engine, _session_factory  # noqa: PLW0603
     resolved_url = url or (settings.database_url if settings else None)
     if not resolved_url:
         raise ValueError('database URL must be provided via settings or url=')
@@ -62,13 +55,6 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 async def run_migrations(engine: AsyncEngine) -> None:
-    """Create tables directly via the ORM metadata.
-
-    alembic is the long-term home for schema evolution (see
-    `bot/db/migrations/`). At bootstrap we short-circuit by calling
-    `Base.metadata.create_all` so a fresh deploy lands a schema without
-    needing `alembic upgrade head` in the entrypoint.
-    """
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

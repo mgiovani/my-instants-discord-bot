@@ -1,13 +1,3 @@
-"""Docker HEALTHCHECK entrypoint.
-
-Exits non-zero if the heartbeat touch file is missing or stale relative to
-`MYINSTANTS_HEARTBEAT_MAX_AGE_SECONDS` (default: 3x the task loop interval).
-The main process refreshes the file from a `@tasks.loop` — see
-`bot.logging_setup.start_heartbeat`. This is the runtime signal that the
-Discord gateway connection is alive and the player task is scheduling
-correctly.
-"""
-
 from __future__ import annotations
 
 import os

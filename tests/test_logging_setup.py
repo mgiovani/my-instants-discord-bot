@@ -46,8 +46,8 @@ def test_json_sink_produces_structured_records(capsys):
 
 def test_configure_sentry_is_noop_without_dsn(settings):
     assert settings.sentry_dsn is None
-    configure_sentry(settings)  # should not raise
+    configure_sentry(settings)
 
 
 def test_capture_exception_is_safe_without_sentry():
-    capture_exception(RuntimeError('x'))  # no sentry init; must not raise
+    capture_exception(RuntimeError('x'))

@@ -42,13 +42,6 @@ _ytdl = yt_dlp.YoutubeDL(_YTDL_OPTIONS)
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
-    """Audio source backed by an FFmpeg stream to a resolved URL.
-
-    The raw stream URL is kept on the instance so callers (e.g. `/loop`)
-    can spawn a fresh FFmpegPCMAudio — the one held on `self` is
-    single-use and will silently play nothing after it's been consumed.
-    """
-
     def __init__(
         self,
         *,
@@ -85,7 +78,6 @@ class YTDLSource(discord.PCMVolumeTransformer):
         return f'**{self.title}** by **{self.uploader}**'
 
     def reset_stream(self) -> None:
-        """Rebuild the underlying FFmpeg process for replay (/loop)."""
         previous = self.original
         self.original = _spawn_ffmpeg(self.stream_url)
         cleanup = getattr(previous, 'cleanup', None)

@@ -1,11 +1,3 @@
-"""Domain-friendly CRUD wrappers around the SQLAlchemy models.
-
-Command handlers never import SQLAlchemy directly — they take a
-repository and call its async methods. This keeps `bot/commands/` free
-of ORM boilerplate and makes tests trivial (swap repos for fakes or
-use an in-memory SQLite session factory).
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

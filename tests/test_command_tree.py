@@ -45,4 +45,4 @@ def test_cog_exposes_expected_slash_commands(cog):
 
 def test_help_embed_lists_every_command(cog):
     names = {cmd.name for cmd in cog.get_app_commands()}
-    assert names  # sanity
+    assert names

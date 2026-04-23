@@ -2,23 +2,15 @@ from __future__ import annotations
 
 
 class MyInstantsBotError(Exception):
-    """Base for all bot-raised errors.
-
-    Subclasses whose instances carry a user-safe `message` attribute are
-    surfaced directly in the slash-command reply; anything else is treated
-    as an unexpected failure, logged with full context, and reported to
-    Sentry when configured.
-    """
-
     user_message: str | None = None
 
 
 class MissingBotToken(MyInstantsBotError):
-    user_message = None
+    pass
 
 
 class VoiceError(MyInstantsBotError):
-    """Voice-channel precondition failure (not connected, already joined)."""
+    pass
 
 
 class NotInVoiceError(VoiceError):
@@ -52,21 +44,17 @@ class NoSearchResultsError(MyInstantsBotError):
 
 
 class CrawlerError(MyInstantsBotError):
-    """Base for scraping failures against myinstants.com."""
-
     user_message = 'MyInstants is having a moment. Try again in a bit.'
 
 
 class CrawlerParseError(CrawlerError):
-    """Markup we depend on has drifted."""
-
     user_message = (
         'MyInstants changed their layout. The maintainer has been nudged.'
     )
 
 
 class CrawlerHTTPError(CrawlerError):
-    """Non-2xx response or connection failure."""
+    pass
 
 
 class YTDLError(MyInstantsBotError):

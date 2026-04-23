@@ -25,8 +25,6 @@ _VIEWS_RE = re.compile(r'[\d,]+\s*views', re.IGNORECASE)
 
 @dataclass(frozen=True, slots=True)
 class InstantSummary:
-    """Minimum info needed to enqueue a sound from a search hit."""
-
     name: str
     page_url: str
     mp3_url: str
@@ -53,13 +51,6 @@ class InstantDetails:
 
 
 class InstantsCrawler:
-    """Async scraper for myinstants.com.
-
-    The crawler holds no mutable state beyond its aiohttp session; tests can
-    pass a session backed by `aioresponses`. Pass `session=None` and the
-    crawler will create its own; call `aclose()` on shutdown when it does.
-    """
-
     BASE_URL = _BASE_URL
 
     def __init__(
