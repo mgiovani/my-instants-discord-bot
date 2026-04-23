@@ -1,362 +1,280 @@
-import asyncio
+from __future__ import annotations
+
 import math
+from typing import TYPE_CHECKING
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 from loguru import logger
 
-from bot.exceptions import VoiceError, YTDLError
-from bot.song import Song, SongQueue
+from bot.exceptions import (
+    EmptyQueueError,
+    NotInVoiceError,
+    NothingPlayingError,
+)
+from bot.song import Song
 from bot.ytdl import YTDLSource
-from crawler.instants import InstantsCrawler
 
-
-class VoiceState:
-    def __init__(self, bot, context):
-        self.bot = bot
-        self._context = context
-        self.timed_out = False
-
-        self.current = None
-        self.voice = None
-        self.next = asyncio.Event()
-        self.songs = SongQueue()
-
-        self._loop = False
-        self._volume = 0.5
-        self.skip_votes = set()
-
-        self.audio_player = bot.loop.create_task(self.audio_player_task())
-
-    def __del__(self):
-        self.audio_player.cancel()
-
-    @property
-    def loop(self):
-        return self._loop
-
-    @loop.setter
-    def loop(self, value: bool):
-        self._loop = value
-
-    @property
-    def volume(self):
-        return self._volume
-
-    @volume.setter
-    def volume(self, value: float):
-        self._volume = value
-
-    @property
-    def is_playing(self):
-        return self.voice and self.current
-
-    async def audio_player_task(self):
-        while True:
-            self.next.clear()
-
-            if not self.loop:
-                try:
-                    async with asyncio.timeout(180):  # 3 minutes
-                        self.current = await self.songs.get()
-                except TimeoutError:
-                    await self.stop()
-                    self.timed_out = True
-                    return
-
-            self.current.source.volume = self._volume
-            self.voice.play(self.current.source, after=self.play_next_song)
-            await self._context.channel.send(embed=self.current.create_embed())
-
-            await self.next.wait()
-
-    def play_next_song(self, error=None):
-        if error:
-            raise VoiceError(str(error))
-
-        self.next.set()
-
-    def skip(self):
-        self.skip_votes.clear()
-
-        if self.is_playing:
-            self.voice.stop()
-
-    async def stop(self):
-        self.songs.clear()
-
-        if self.voice:
-            await self.voice.disconnect()
-            self.voice = None
+if TYPE_CHECKING:
+    from bot.config import Settings
+    from bot.voice import GuildVoiceState, GuildVoiceStateManager
+    from crawler.instants import InstantsCrawler
 
 
 class InstantClient(commands.Cog):
-    crawler = InstantsCrawler()
-
-    def __init__(self, bot):
+    def __init__(
+        self,
+        bot: commands.Bot,
+        *,
+        settings: Settings,
+        crawler: InstantsCrawler,
+        voice_states: GuildVoiceStateManager,
+    ) -> None:
         self.bot = bot
-        self.voice_states = {}
+        self.settings = settings
+        self.crawler = crawler
+        self.voice_states = voice_states
 
-    def get_voice_state(self, context):
-        state = self.voice_states.get(context.guild.id)
-        if not state or state.timed_out:
-            state = VoiceState(self.bot, context)
-            self.voice_states[context.guild.id] = state
+    async def _state_for(
+        self, interaction: discord.Interaction
+    ) -> GuildVoiceState:
+        if interaction.guild_id is None:
+            raise NotInVoiceError('Command used outside a guild.')
+        state = await self.voice_states.get_or_create(interaction.guild_id)
+        channel = interaction.channel
+        if channel is not None and hasattr(channel, 'send'):
+            state.set_now_playing_sink(channel.send)  # type: ignore[assignment]
         return state
 
-    def cog_check(self, context):
-        if not context.guild:
-            raise commands.NoPrivateMessage(
-                "This command can't be used in DM channels."
+    def _require_voice_channel(
+        self, interaction: discord.Interaction
+    ) -> discord.VoiceChannel | discord.StageChannel:
+        member = interaction.user
+        voice = getattr(member, 'voice', None)
+        if voice is None or voice.channel is None:
+            raise NotInVoiceError
+        channel = voice.channel
+        if not isinstance(channel, (discord.VoiceChannel, discord.StageChannel)):
+            raise NotInVoiceError
+        return channel
+
+    async def _ensure_connected(
+        self,
+        interaction: discord.Interaction,
+        state: GuildVoiceState,
+    ) -> discord.VoiceClient:
+        target = self._require_voice_channel(interaction)
+        live = interaction.guild.voice_client if interaction.guild else None
+
+        if isinstance(live, discord.VoiceClient) and live.is_connected():
+            if live.channel is not None and live.channel.id != target.id:
+                await live.move_to(target)
+            state.voice = live
+            return live
+
+        voice = await target.connect(self_deaf=True)
+        state.voice = voice
+        return voice
+
+    @app_commands.command(name='leave', description='Disconnect from voice.')
+    async def leave(self, interaction: discord.Interaction) -> None:
+        if interaction.guild_id is None:
+            raise NotInVoiceError('Command used outside a guild.')
+        state = self.voice_states.get(interaction.guild_id)
+        if state is None or state.voice is None:
+            await interaction.response.send_message(
+                'Not connected to any voice channel.', ephemeral=True
             )
-        return True
-
-    async def interaction_check(self, interaction):
-        logger.info(
-            f'Slash Command: {interaction.command.name}\n'
-            f'Message: {interaction.message}\n'
-            f'User: {interaction.user}\n'
-            f'Channel: {interaction.channel}\n'
-            f'Guild: {interaction.guild}'
-        )
-        return True
-
-    async def cog_command_error(self, context, error):
-        await context.send(
-            'An error occurred: {}'.format(str(error)), ephemeral=True
-        )
-        logger.error('An error occurred: {}'.format(str(error)))
-
-    async def join(self, context):
-        """Utility function to make the bot join the user's voice channel."""
-        if not context.author.voice:
-            raise VoiceError('You are not connected to a voice channel.')
-
-        channel = context.author.voice.channel
-        if context.voice_state.voice:
-            return await context.voice_client.move_to(channel)
-        context.voice_state.voice = await channel.connect()
-
-    @app_commands.command(
-        name='leave', description='Disconnect Myinstants bot.'
-    )
-    async def leave(self, interaction: discord.Interaction):
-        voice_state = self.get_voice_state(interaction)
-        if not voice_state.voice:
-            return await interaction.response.send_message(
-                'Not connected to any voice channel.'
-            )
-
+            return
         await interaction.response.send_message('Leaving current channel.')
-        await voice_state.stop()
-        del self.voice_states[interaction.guild.id]
+        await self.voice_states.drop(interaction.guild_id)
 
-    @app_commands.command(name='volume', description='Set volume sound.')
-    async def volume(self, interaction: discord.Interaction, volume: int):
-        voice_state = self.get_voice_state(interaction)
-
-        if not voice_state.is_playing:
-            return await interaction.response.send_message(
-                'Nothing being played at the moment.'
+    @app_commands.command(name='volume', description='Set volume (0-100).')
+    async def volume(
+        self, interaction: discord.Interaction, volume: int
+    ) -> None:
+        state = await self._state_for(interaction)
+        if not state.is_playing:
+            raise NothingPlayingError
+        if not 0 <= volume <= 100:
+            await interaction.response.send_message(
+                'Volume must be between 0 and 100.', ephemeral=True
             )
-
-        if volume < 0 or volume > 100:
-            return await interaction.response.send_message(
-                'Volume must be between 0 and 100'
-            )
-
-        voice_state.volume = volume / 100
+            return
+        state.volume = volume / 100
+        if state.current is not None:
+            state.current.source.volume = state.volume
         await interaction.response.send_message(
-            f'Volume of the player set to {volume}%.'
+            f'Volume set to {volume}%.'
         )
 
     @app_commands.command(
-        name='now', description='Show sound currently playing.'
+        name='now', description='Show the currently playing sound.'
     )
-    async def now(self, interaction: discord.Interaction):
-        voice_state = self.get_voice_state(interaction)
+    async def now(self, interaction: discord.Interaction) -> None:
+        state = await self._state_for(interaction)
+        if state.current is None:
+            raise NothingPlayingError
         await interaction.response.send_message(
-            embed=voice_state.current.create_embed()
+            embed=state.current.create_embed()
         )
 
-    @app_commands.command(name='pause', description='Pause my instants sound.')
-    async def pause(self, interaction: discord.Interaction):
-        voice_state = self.get_voice_state(interaction)
-        if voice_state.voice and voice_state.voice.is_playing():
-            await interaction.response.send_message('Pausing current sound.')
-            voice_state.voice.pause()
+    @app_commands.command(name='pause', description='Pause playback.')
+    async def pause(self, interaction: discord.Interaction) -> None:
+        state = await self._state_for(interaction)
+        if state.voice is None or not state.voice.is_playing():
+            raise NothingPlayingError
+        state.voice.pause()
+        await interaction.response.send_message('Pausing current sound.')
 
-    @app_commands.command(
-        name='resume', description='Resume my instants sound.'
-    )
-    async def resume(self, interaction: discord.Interaction):
-        voice_state = self.get_voice_state(interaction)
-        if voice_state.voice and voice_state.voice.is_paused():
-            await interaction.response.send_message('Resuming paused sound.')
-            voice_state.voice.resume()
-
-    @app_commands.command(name='skip', description='Skip current sound.')
-    async def skip(self, interaction: discord.Interaction):
-        voice_state = self.get_voice_state(interaction)
-        if not voice_state.is_playing:
-            return await interaction.response.send_message(
-                'Not playing any sound right now...'
+    @app_commands.command(name='resume', description='Resume playback.')
+    async def resume(self, interaction: discord.Interaction) -> None:
+        state = await self._state_for(interaction)
+        if state.voice is None or not state.voice.is_paused():
+            await interaction.response.send_message(
+                'Nothing is paused right now.', ephemeral=True
             )
+            return
+        state.voice.resume()
+        await interaction.response.send_message('Resuming paused sound.')
+
+    @app_commands.command(name='skip', description='Skip the current sound.')
+    async def skip(self, interaction: discord.Interaction) -> None:
+        state = await self._state_for(interaction)
+        if not state.is_playing or state.current is None:
+            raise NothingPlayingError
 
         voter = interaction.user
-        if voter == voice_state.current.requester:
+        if voter == state.current.requester:
+            state.skip()
             await interaction.response.send_message('Skipping current sound.')
-            voice_state.skip()
+            return
 
-        elif voter.id not in voice_state.skip_votes:
-            voice_state.skip_votes.add(voter.id)
-            total_votes = len(voice_state.skip_votes)
-
-            if total_votes >= 3:
-                voice_state.skip()
-            else:
-                await interaction.response.send_message(
-                    f'Skip vote added, currently at **{total_votes}/3**'
-                )
-
-        else:
+        if voter.id in state.skip_votes:
             await interaction.response.send_message(
-                'You have already voted to skip this song.'
+                'You have already voted to skip.', ephemeral=True
             )
+            return
 
-    @app_commands.command(name='queue', description='See sound queue.')
-    async def queue(self, interaction: discord.Interaction, page: int = 1):
-        voice_state = self.get_voice_state(interaction)
-        if len(voice_state.songs) == 0:
-            return await interaction.response.send_message('Empty queue.')
+        total = state.register_skip_vote(voter.id)
+        threshold = state.skip_vote_threshold
+        if total >= threshold:
+            state.skip()
+            await interaction.response.send_message(
+                f'Skip passed ({total}/{threshold}).'
+            )
+            return
+        await interaction.response.send_message(
+            f'Skip vote added, currently at **{total}/{threshold}**.'
+        )
 
-        items_per_page = 10
-        pages = math.ceil(len(voice_state.songs) / items_per_page)
+    @app_commands.command(name='queue', description='Show the queue.')
+    async def queue(
+        self, interaction: discord.Interaction, page: int = 1
+    ) -> None:
+        state = await self._state_for(interaction)
+        total = len(state.songs)
+        if total == 0:
+            raise EmptyQueueError
+
+        items_per_page = self.settings.queue_page_size
+        pages = max(1, math.ceil(total / items_per_page))
+        page = max(1, min(page, pages))
 
         start = (page - 1) * items_per_page
         end = start + items_per_page
 
-        queue = ''
-        for i, song in enumerate(voice_state.songs[start:end], start=start):
-            queue += '`{0}.` [**{1.source.title}**]({1.source.url})\n'.format(
-                i + 1, song
+        lines = [
+            f'`{idx + 1}.` [**{song.source.title}**]({song.source.url})'
+            for idx, song in enumerate(
+                state.songs[start:end], start=start
             )
-
+        ]
         embed = discord.Embed(
-            description=f'**{len(voice_state.songs)} sounds:**\n\n{queue}'
+            description=f'**{total} sound(s):**\n\n' + '\n'.join(lines),
         ).set_footer(text=f'Viewing page {page}/{pages}')
-
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name='shuffle', description='Shuffle queue.')
-    async def shuffle(self, interaction: discord.Interaction):
-        voice_state = self.get_voice_state(interaction)
-        if len(voice_state.songs) == 0:
-            return await interaction.response.send_message('Empty queue.')
-
-        voice_state.songs.shuffle()
+    @app_commands.command(name='shuffle', description='Shuffle the queue.')
+    async def shuffle(self, interaction: discord.Interaction) -> None:
+        state = await self._state_for(interaction)
+        if len(state.songs) == 0:
+            raise EmptyQueueError
+        state.songs.shuffle()
         await interaction.response.send_message('Queue shuffled.')
 
-    @app_commands.command(name='remove', description='Remove from queue.')
-    async def remove(self, interaction: discord.Interaction, index: int):
-        voice_state = self.get_voice_state(interaction)
-        if len(voice_state.songs) == 0:
-            return await interaction.response.send_message('Empty queue.')
-
-        voice_state.songs.remove(index - 1)
+    @app_commands.command(name='remove', description='Remove from the queue.')
+    async def remove(
+        self, interaction: discord.Interaction, index: int
+    ) -> None:
+        state = await self._state_for(interaction)
+        if len(state.songs) == 0:
+            raise EmptyQueueError
+        state.songs.remove(index - 1)
         await interaction.response.send_message(
             f'Removed song at position {index}.'
         )
 
-    @app_commands.command(
-        name='loop', description='Loop last myinstants sound.'
-    )
-    async def loop(self, interaction: discord.Interaction):
-        # voice_state = self.get_voice_state(interaction)
-        # if not voice_state.is_playing:
-        #     return await interaction.response.send_message(
-        #         'Nothing being played at the moment.'
-        #     )
+    @app_commands.command(name='loop', description='Toggle loop for playing.')
+    async def loop(self, interaction: discord.Interaction) -> None:
+        state = await self._state_for(interaction)
+        if not state.is_playing:
+            raise NothingPlayingError
+        state.loop_current = not state.loop_current
+        status = 'enabled' if state.loop_current else 'disabled'
+        await interaction.response.send_message(f'Loop is now {status}.')
 
-        # # Inverse boolean value to loop and unloop.
-        # voice_state.loop = not voice_state.loop
-        # await interaction.response.send_message(
-        #     f'Loop is now {"enabled" if voice_state.loop else "disabled"}.'
-        # )
-
-        # TODO Fix loop commmand
-        await interaction.response.send_message(
-            'Loop command is temporarily disabled.'
-        )
-
-    @app_commands.command(name='mi', description='Play myinstants sound.')
-    async def play(self, interaction: discord.Interaction, search: str):
-        if not interaction.user.voice or not interaction.user.voice.channel:
-            return await interaction.response.send_message(
-                'You are not connected to any voice channel.', ephemeral=True
-            )
-
-        # Defer immediately to avoid interaction timeout (3 second limit)
+    @app_commands.command(name='mi', description='Play a MyInstants sound.')
+    async def play(
+        self, interaction: discord.Interaction, search: str
+    ) -> None:
+        self._require_voice_channel(interaction)
         await interaction.response.defer()
 
-        voice_state = self.get_voice_state(interaction)
+        state = await self._state_for(interaction)
+        await self._ensure_connected(interaction, state)
 
-        if not voice_state.voice:
-            channel = interaction.user.voice.channel
-            voice_state.voice = await channel.connect()
+        instant = await self.crawler.first_match(search)
+        details = await self.crawler.get_details(instant)
+        source = await YTDLSource.from_url(
+            interaction,
+            instant.mp3_url,
+            details,
+            settings=self.settings,
+            loop=self.bot.loop,
+        )
+        song = Song(source)
+        await state.songs.put(song)
+        logger.info(
+            'Enqueued {title!r} in guild {guild_id}',
+            title=source.title or instant.name,
+            guild_id=interaction.guild_id,
+        )
+        await interaction.followup.send(f'Enqueued {source!s}.')
 
-        async with interaction.channel.typing():
-            try:
-                instant = self.crawler.get_single_search_result(search)
-                if not instant:
-                    raise YTDLError(
-                        f"Couldn't retrieve any matches for `{search}`"
-                    )
-
-                mp3_link = self.crawler.get_instant_mp3_link(instant)
-                instant_details = self.crawler.get_instant_details(instant)
-                source = await YTDLSource.from_url(
-                    interaction, mp3_link, instant_details, loop=self.bot.loop
-                )
-            except YTDLError as e:
-                await interaction.followup.send(
-                    'An error occurred while processing this request. '
-                    f'Details: {str(e)}',
-                    ephemeral=True,
-                )
-            else:
-                song = Song(source)
-                await voice_state.songs.put(song)
-                await interaction.followup.send(f'Enqueued {str(source)}.')
-
-    @app_commands.command(
-        name='help', description='List and describe all available commands.'
-    )
-    async def help_command(self, interaction: discord.Interaction):
-        commands_info = [
-            ('/leave', 'Disconnect the bot from the voice channel.'),
-            ('/now', 'Shows the current sound playing.'),
+    @app_commands.command(name='help', description='List commands.')
+    async def help_command(
+        self, interaction: discord.Interaction
+    ) -> None:
+        lines = [
             ('/mi <search>', 'Play a sound from MyInstants.'),
+            ('/leave', 'Disconnect the bot from the voice channel.'),
+            ('/now', 'Show the current sound playing.'),
             ('/pause', 'Pause the current playback.'),
             ('/resume', 'Resume playback.'),
-            ('/skip', 'Skip the current track.'),
-            ('/queue', 'Show the current playback queue.'),
+            ('/skip', 'Skip the current track (vote if not requester).'),
+            ('/queue [page]', 'Show the queue.'),
             ('/shuffle', 'Shuffle the queue.'),
-            (
-                '/remove <index>',
-                'Remove a track from the queue by its position.',
-            ),
+            ('/remove <index>', 'Remove a track from the queue.'),
             ('/loop', 'Toggle looping of the current track.'),
             ('/volume <value>', 'Set the playback volume (0-100).'),
         ]
-
-        description = '\n'.join(
-            [f'**{cmd}**: {desc}' for cmd, desc in commands_info]
-        )
         embed = discord.Embed(
             title='Command List',
-            description=description,
+            description='\n'.join(
+                f'**{cmd}**: {desc}' for cmd, desc in lines
+            ),
             color=discord.Color.blue(),
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed, ephemeral=True)

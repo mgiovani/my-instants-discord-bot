@@ -1,135 +1,173 @@
-import os
-from unittest import mock
+from __future__ import annotations
 
+from pathlib import Path
+
+import aiohttp
 import pytest
-from bs4 import BeautifulSoup
+from aioresponses import aioresponses
 
+from bot.exceptions import (
+    CrawlerHTTPError,
+    CrawlerParseError,
+    NoSearchResultsError,
+)
 from crawler.instants import InstantsCrawler
 
-
-def get_fixture(file_name: str) -> dict:
-    path = os.path.dirname(os.path.abspath(__file__))
-    full_path = os.path.join(path, 'fixtures', file_name)
-    with open(full_path, 'rb') as f:
-        return f.read()
+FIXTURES = Path(__file__).parent / 'fixtures'
 
 
-@pytest.fixture
-def search_results_page():
-    return get_fixture('search_results.html')
+def _fixture(name: str) -> bytes:
+    return (FIXTURES / name).read_bytes()
 
 
 @pytest.fixture
-def instant_details_page():
-    return get_fixture('instant_details.html')
+def search_results_body() -> bytes:
+    return _fixture('search_results.html')
 
 
 @pytest.fixture
-def instants_crawler():
-    return InstantsCrawler()
+def instant_details_body() -> bytes:
+    return _fixture('instant_details.html')
 
 
 @pytest.fixture
-def instant_result(search_results_page, instants_crawler):
-    with mock.patch('crawler.instants.requests.get') as mock_requests:
-        mock_requests.return_value.content = search_results_page
-        instant_result = instants_crawler.get_single_search_result('discord')
-    return instant_result
+async def session():
+    async with aiohttp.ClientSession() as s:
+        yield s
 
 
 @pytest.fixture
-def soup_instant_details(instant_details_page):
-    return BeautifulSoup(instant_details_page, 'html.parser')
+def crawler(session):
+    return InstantsCrawler(session=session)
 
 
-def test_instants_crawler_has_base_url():
-    crawler = InstantsCrawler()
-    assert crawler.BASE_URL == 'https://www.myinstants.com'
+async def test_has_base_url():
+    assert InstantsCrawler.BASE_URL == 'https://www.myinstants.com'
 
 
-@mock.patch('crawler.instants.requests.get')
-def test_instants_crawler_get_search_results(
-    mock_requests, search_results_page, instants_crawler
-):
-    mock_requests.return_value.content = search_results_page
+async def test_search_returns_parsed_summaries(crawler, search_results_body):
+    with aioresponses() as mocked:
+        mocked.get(
+            'https://www.myinstants.com/search?name=discord',
+            status=200,
+            body=search_results_body,
+        )
+        results = await crawler.search('discord')
 
-    results = instants_crawler.get_search_results('discord')
     assert len(results) == 25
-    assert 'Discord Notification' in results[0].text
-    assert 'discordjoin' in results[1].text
-    assert 'discord call' in results[2].text
-
-
-@mock.patch('crawler.instants.requests.get')
-def test_instants_crawler_get_single_search_result(
-    mock_requests, search_results_page, instants_crawler
-):
-    mock_requests.return_value.content = search_results_page
-
-    result = instants_crawler.get_single_search_result('discord')
-    assert 'Discord Notification' in result.text
-
-
-def test_get_instant_name(instants_crawler, instant_result):
-    instant_name = instants_crawler.get_instant_name(instant_result)
-    assert instant_name == 'Discord Notification'
-
-
-def test_get_instant_mp3_link(instants_crawler, instant_result):
-    instant_mp3_link = instants_crawler.get_instant_mp3_link(instant_result)
-    assert instant_mp3_link == (
+    assert results[0].name == 'Discord Notification'
+    assert results[0].page_url.startswith('https://www.myinstants.com/instant/')
+    assert results[0].mp3_url == (
         'https://www.myinstants.com/media/sounds/discord-notification.mp3'
     )
 
 
-def test_get_instant_link(instants_crawler, instant_result):
-    instant_link = instants_crawler.get_instant_link(instant_result)
-    assert instant_link == (
-        'https://www.myinstants.com/instant/discord-notification-38119/'
-    )
+async def test_first_match_returns_first_result(crawler, search_results_body):
+    with aioresponses() as mocked:
+        mocked.get(
+            'https://www.myinstants.com/search?name=discord',
+            status=200,
+            body=search_results_body,
+        )
+        match = await crawler.first_match('discord')
+
+    assert match.name == 'Discord Notification'
 
 
-def test_get_instant_details(
-    instants_crawler, instant_result, instant_details_page
+async def test_first_match_raises_when_no_results(crawler):
+    empty_html = b'<html><body><div class="nothing-to-see"></div></body></html>'
+    with aioresponses() as mocked:
+        mocked.get(
+            'https://www.myinstants.com/search?name=nomatch',
+            status=200,
+            body=empty_html,
+        )
+        with pytest.raises(NoSearchResultsError):
+            await crawler.first_match('nomatch')
+
+
+async def test_http_5xx_raises_crawler_http_error(crawler):
+    with aioresponses() as mocked:
+        mocked.get(
+            'https://www.myinstants.com/search?name=x',
+            status=503,
+        )
+        with pytest.raises(CrawlerHTTPError):
+            await crawler.search('x')
+
+
+async def test_connection_error_raises_crawler_http_error(crawler):
+    with aioresponses() as mocked:
+        mocked.get(
+            'https://www.myinstants.com/search?name=x',
+            exception=aiohttp.ClientConnectionError('boom'),
+        )
+        with pytest.raises(CrawlerHTTPError):
+            await crawler.search('x')
+
+
+async def test_malformed_search_result_raises_parse_error(crawler):
+    bad_html = b"""
+        <div class="instant">
+          <a class="instant-link">broken</a>
+        </div>
+    """
+    with aioresponses() as mocked:
+        mocked.get(
+            'https://www.myinstants.com/search?name=x',
+            status=200,
+            body=bad_html,
+        )
+        with pytest.raises(CrawlerParseError):
+            await crawler.search('x')
+
+
+async def test_get_details_parses_expected_fields(
+    crawler, search_results_body, instant_details_body
 ):
-    with mock.patch('crawler.instants.requests.get') as mock_requests:
-        mock_requests.return_value.content = instant_details_page
-        instant_details = instants_crawler.get_instant_details(instant_result)
-    assert instant_details == {
-        'description': None,
-        'likes': '43,960 users',
-        'title': 'Discord Notification',
-        'uploader_name': 'Anonymous',
-        'uploader_url': None,
-        'views': '660,100 views',
+    with aioresponses() as mocked:
+        mocked.get(
+            'https://www.myinstants.com/search?name=discord',
+            status=200,
+            body=search_results_body,
+        )
+        results = await crawler.search('discord')
+
+    target = results[0]
+    with aioresponses() as mocked:
+        mocked.get(
+            target.page_url,
+            status=200,
+            body=instant_details_body,
+        )
+        details = await crawler.get_details(target)
+
+    assert details.title == 'Discord Notification'
+    assert details.uploader_name == 'Anonymous'
+    assert details.uploader_url is None
+    assert details.likes == '43,960 users'
+    assert details.views == '660,100 views'
+    assert details.description is None
+
+
+async def test_to_ytdl_data_shape(crawler, instant_details_body):
+    # Re-use the details fixture alone by manufacturing a summary.
+    from crawler.instants import InstantSummary
+
+    summary = InstantSummary(
+        name='x',
+        page_url='https://www.myinstants.com/instant/x/',
+        mp3_url='https://www.myinstants.com/media/sounds/x.mp3',
+    )
+    with aioresponses() as mocked:
+        mocked.get(summary.page_url, status=200, body=instant_details_body)
+        details = await crawler.get_details(summary)
+    payload = details.to_ytdl_data()
+    assert set(payload.keys()) == {
+        'title',
+        'description',
+        'likes',
+        'uploader_name',
+        'uploader_url',
+        'views',
     }
-
-
-def test_get_instant_title(soup_instant_details, instants_crawler):
-    result = instants_crawler.get_instant_title(soup_instant_details)
-    assert result == 'Discord Notification'
-
-
-def test_get_instant_description(soup_instant_details, instants_crawler):
-    result = instants_crawler.get_instant_description(soup_instant_details)
-    assert result is None
-
-
-def test_get_instant_likes(soup_instant_details, instants_crawler):
-    result = instants_crawler.get_instant_likes(soup_instant_details)
-    assert result == '43,960 users'
-
-
-def test_get_instant_views(soup_instant_details, instants_crawler):
-    result = instants_crawler.get_instant_views(soup_instant_details)
-    assert result == '660,100 views'
-
-
-def test_get_instant_uploader_name(soup_instant_details, instants_crawler):
-    result = instants_crawler.get_instant_uploader_name(soup_instant_details)
-    assert result == 'Anonymous'
-
-
-def test_get_instant_uploader_url(soup_instant_details, instants_crawler):
-    result = instants_crawler.get_instant_uploader_url(soup_instant_details)
-    assert result is None

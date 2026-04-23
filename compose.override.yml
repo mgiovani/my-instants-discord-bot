@@ -1,0 +1,10 @@
+services:
+  myinstants-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: myinstants-bot:dev
+    environment:
+      MYINSTANTS_ENV: dev
+      MYINSTANTS_LOG_FORMAT: pretty
+      MYINSTANTS_LOG_LEVEL: DEBUG

@@ -1,107 +1,207 @@
-import re
+from __future__ import annotations
 
-import requests
+import re
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+import aiohttp
+from bs4 import BeautifulSoup, Tag
 from loguru import logger
-from bs4 import BeautifulSoup
+
+from bot.exceptions import (
+    CrawlerHTTPError,
+    CrawlerParseError,
+    NoSearchResultsError,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+
+_BASE_URL = 'https://www.myinstants.com'
+_MP3_PATH_RE = re.compile(r'/media[^\s"\']+\.mp3')
+_VIEWS_RE = re.compile(r'[\d,]+\s*views', re.IGNORECASE)
+
+
+@dataclass(frozen=True, slots=True)
+class InstantSummary:
+    """Minimum info needed to enqueue a sound from a search hit."""
+
+    name: str
+    page_url: str
+    mp3_url: str
+
+
+@dataclass(frozen=True, slots=True)
+class InstantDetails:
+    title: str | None
+    description: str | None
+    likes: str | None
+    uploader_name: str
+    uploader_url: str | None
+    views: str | None
+
+    def to_ytdl_data(self) -> dict[str, str | None]:
+        return {
+            'title': self.title,
+            'description': self.description,
+            'likes': self.likes,
+            'uploader_name': self.uploader_name,
+            'uploader_url': self.uploader_url,
+            'views': self.views,
+        }
 
 
 class InstantsCrawler:
-    BASE_URL = 'https://www.myinstants.com'
+    """Async scraper for myinstants.com.
 
-    def get_search_results(self, search):
-        logger.debug(f'Getting search results for "{search}"')
-        html = requests.get(f'{self.BASE_URL}/search?name={search}')
-        soup = BeautifulSoup(html.content, 'html.parser')
-        instants = soup.select('.instant')
-        return instants[:25]
+    The crawler holds no mutable state beyond its aiohttp session; tests can
+    pass a session backed by `aioresponses`. Pass `session=None` and the
+    crawler will create its own; call `aclose()` on shutdown when it does.
+    """
 
-    def get_single_search_result(self, search):
-        results = self.get_search_results(search)
-        return results[0] if results else None
+    BASE_URL = _BASE_URL
 
-    def get_instant_name(self, instant):
-        instant_link = instant.select_one('.instant-link')
-        instant_name = instant_link.text
-        logger.debug(f'Found instant name: "{instant_name}"')
-        return instant_name
+    def __init__(
+        self,
+        *,
+        session: aiohttp.ClientSession | None = None,
+        timeout_seconds: float = 10.0,
+        connect_timeout_seconds: float = 5.0,
+        search_limit: int = 25,
+    ) -> None:
+        self._owns_session = session is None
+        self._timeout = aiohttp.ClientTimeout(
+            total=timeout_seconds,
+            connect=connect_timeout_seconds,
+        )
+        self._session = session
+        self._search_limit = search_limit
 
-    def get_instant_mp3_link(self, instant):
-        mp3_div = instant.select_one('.small-button')
-        mp3_link = re.search('/media.+.mp3', str(mp3_div)).group(0)
-        full_mp3_link = f'{self.BASE_URL}{mp3_link}'
-        logger.debug(f'Found mp3 link: "{full_mp3_link}"')
-        return full_mp3_link
+    async def aclose(self) -> None:
+        if self._owns_session and self._session is not None:
+            await self._session.close()
+            self._session = None
 
-    def get_instant_link(self, instant):
-        link_attrs = instant.select_one('.instant-link').attrs
-        instant_link = link_attrs['href']
-        full_instant_link = f'{self.BASE_URL}{instant_link}'
-        logger.debug(f'Found instant link: "{full_instant_link}"')
-        return full_instant_link
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is None:
+            self._session = aiohttp.ClientSession(timeout=self._timeout)
+        return self._session
 
-    def get_instant_details(self, instant):
-        instant_link = self.get_instant_link(instant)
-        html = requests.get(instant_link)
-        soup = BeautifulSoup(html.content, 'html.parser')
-        title = self.get_instant_title(soup)
-        description = self.get_instant_description(soup)
-        likes = self.get_instant_likes(soup)
-        uploader_name = self.get_instant_uploader_name(soup)
-        uploader_url = self.get_instant_uploader_url(soup)
-        views = self.get_instant_views(soup)
-        instant_details = {
-            'title': title,
-            'description': description,
-            'likes': likes,
-            'uploader_name': uploader_name,
-            'uploader_url': uploader_url,
-            'views': views,
-        }
-        logger.debug(f'Found instant details: "{instant_details}"')
-        return instant_details
-
-    def get_instant_title(self, soup):
+    async def _fetch_soup(self, url: str) -> BeautifulSoup:
+        session = await self._get_session()
         try:
-            return soup.select_one('#instant-page-title').text
-        except AttributeError:
-            return None
+            async with session.get(url, timeout=self._timeout) as response:
+                response.raise_for_status()
+                body = await response.read()
+        except aiohttp.ClientError as exc:
+            raise CrawlerHTTPError(f'GET {url} failed: {exc}') from exc
+        return BeautifulSoup(body, 'html.parser')
 
-    def get_instant_description(self, soup):
-        try:
-            return soup.select_one('#instant-page-description').p.text
-        except AttributeError:
-            return None
+    async def search(self, query: str) -> list[InstantSummary]:
+        logger.debug('Searching myinstants for {query!r}', query=query)
+        soup = await self._fetch_soup(
+            f'{_BASE_URL}/search?name={query}',
+        )
+        instants = soup.select('.instant')[: self._search_limit]
+        return [self._parse_summary(tag) for tag in instants]
 
-    def get_instant_likes(self, soup):
-        try:
-            return soup.select_one('#instant-page-likes').b.text
-        except AttributeError:
-            return None
+    async def first_match(self, query: str) -> InstantSummary:
+        results = await self.search(query)
+        if not results:
+            raise NoSearchResultsError(query)
+        return results[0]
 
-    def get_instant_uploader_name(self, soup):
-        try:
-            views_div = soup.select_one(
-                '#instant-page-likes'
-            ).next_sibling.next_sibling
-            return views_div.a.text
-        except AttributeError:
-            return 'Anonymous'
+    async def get_details(self, instant: InstantSummary) -> InstantDetails:
+        soup = await self._fetch_soup(instant.page_url)
+        return InstantDetails(
+            title=_safe_text(soup.select_one('#instant-page-title')),
+            description=_safe_text(
+                soup.select_one('#instant-page-description p')
+            ),
+            likes=_safe_text(soup.select_one('#instant-page-likes b')),
+            uploader_name=_parse_uploader_name(soup),
+            uploader_url=_parse_uploader_url(soup),
+            views=_parse_views(soup),
+        )
 
-    def get_instant_uploader_url(self, soup):
-        try:
-            views_div = soup.select_one(
-                '#instant-page-likes'
-            ).next_sibling.next_sibling
-            href_attr = views_div.a.attrs.get('href')
-            return f'{self.BASE_URL}{href_attr}'
-        except AttributeError:
-            return None
+    def _parse_summary(self, tag: Tag) -> InstantSummary:
+        name_el = tag.select_one('.instant-link')
+        if name_el is None:
+            raise CrawlerParseError(
+                'Could not find `.instant-link` on a search result'
+            )
+        page_href = _href(name_el.attrs)
+        if page_href is None:
+            raise CrawlerParseError('`.instant-link` has no `href`')
 
-    def get_instant_views(self, soup):
-        try:
-            views_div = soup.select_one(
-                '#instant-page-likes'
-            ).next_sibling.next_sibling
-            return re.search(r'[\d,]+ *views', views_div.text).group(0)
-        except AttributeError:
-            return None
+        mp3_container = tag.select_one('.small-button')
+        if mp3_container is None:
+            raise CrawlerParseError(
+                'Could not find `.small-button` on a search result'
+            )
+        mp3_match = _MP3_PATH_RE.search(str(mp3_container))
+        if mp3_match is None:
+            raise CrawlerParseError(
+                'Could not extract mp3 URL from `.small-button`'
+            )
+
+        return InstantSummary(
+            name=name_el.get_text(strip=True),
+            page_url=f'{_BASE_URL}{page_href}',
+            mp3_url=f'{_BASE_URL}{mp3_match.group(0)}',
+        )
+
+
+def _href(attrs: Mapping[str, object]) -> str | None:
+    value = attrs.get('href')
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list) and value and isinstance(value[0], str):
+        return value[0]
+    return None
+
+
+def _safe_text(element: Tag | None) -> str | None:
+    if element is None:
+        return None
+    text = element.get_text(strip=True)
+    return text or None
+
+
+def _uploader_block(soup: BeautifulSoup) -> Tag | None:
+    likes_block = soup.select_one('#instant-page-likes')
+    if likes_block is None:
+        return None
+    sibling = likes_block.find_next_sibling()
+    return sibling if isinstance(sibling, Tag) else None
+
+
+def _parse_uploader_name(soup: BeautifulSoup) -> str:
+    block = _uploader_block(soup)
+    if block is None:
+        return 'Anonymous'
+    anchor = block.find('a')
+    if not isinstance(anchor, Tag):
+        return 'Anonymous'
+    text = anchor.get_text(strip=True)
+    return text or 'Anonymous'
+
+
+def _parse_uploader_url(soup: BeautifulSoup) -> str | None:
+    block = _uploader_block(soup)
+    if block is None:
+        return None
+    anchor = block.find('a')
+    if not isinstance(anchor, Tag):
+        return None
+    href = _href(anchor.attrs)
+    return f'{_BASE_URL}{href}' if href else None
+
+
+def _parse_views(soup: BeautifulSoup) -> str | None:
+    block = _uploader_block(soup)
+    if block is None:
+        return None
+    match = _VIEWS_RE.search(block.get_text(' ', strip=True))
+    return match.group(0) if match else None
