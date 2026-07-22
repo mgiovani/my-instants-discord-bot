@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from bot.run import MyInstantsBot
 from bot.voice.manager import GuildVoiceStateManager
 from bot.voice.state import GuildVoiceState
 
@@ -41,6 +43,18 @@ async def test_skip_clears_votes_and_stops_voice(state):
 
     assert state.skip_votes == set()
     voice.stop.assert_called_once()
+
+
+async def test_play_current_drops_song_when_voice_disconnected(state):
+    voice = MagicMock()
+    voice.is_connected.return_value = False
+    state.voice = voice
+    song = MagicMock()
+
+    await state._play_current(song, announce=False)
+
+    voice.play.assert_not_called()
+    assert state._next_event.is_set()
 
 
 async def test_player_loop_reaps_on_timeout(settings):
@@ -135,3 +149,52 @@ async def test_loop_notify_is_noop_without_sink(settings):
         loop_max_iterations=5,
     )
     await state._notify_loop_capped()
+
+
+def _fake_bot(user_id: int) -> SimpleNamespace:
+    return SimpleNamespace(
+        user=SimpleNamespace(id=user_id),
+        voice_states=MagicMock(),
+    )
+
+
+def _voice_state(channel_id: int | None, guild_id: int = 999):
+    if channel_id is None:
+        return SimpleNamespace(channel=None)
+    channel = SimpleNamespace(
+        id=channel_id, guild=SimpleNamespace(id=guild_id)
+    )
+    return SimpleNamespace(channel=channel)
+
+
+async def test_on_voice_state_update_invalidates_on_full_disconnect():
+    fake_bot = _fake_bot(user_id=1)
+    member = SimpleNamespace(id=1)
+    before = _voice_state(channel_id=1, guild_id=999)
+    after = _voice_state(channel_id=None)
+
+    await MyInstantsBot.on_voice_state_update(fake_bot, member, before, after)
+
+    fake_bot.voice_states.invalidate.assert_called_once_with(999)
+
+
+async def test_on_voice_state_update_ignores_other_members():
+    fake_bot = _fake_bot(user_id=1)
+    member = SimpleNamespace(id=2)
+    before = _voice_state(channel_id=1, guild_id=999)
+    after = _voice_state(channel_id=None)
+
+    await MyInstantsBot.on_voice_state_update(fake_bot, member, before, after)
+
+    fake_bot.voice_states.invalidate.assert_not_called()
+
+
+async def test_on_voice_state_update_ignores_channel_move():
+    fake_bot = _fake_bot(user_id=1)
+    member = SimpleNamespace(id=1)
+    before = _voice_state(channel_id=1, guild_id=999)
+    after = _voice_state(channel_id=2, guild_id=999)
+
+    await MyInstantsBot.on_voice_state_update(fake_bot, member, before, after)
+
+    fake_bot.voice_states.invalidate.assert_not_called()
