@@ -1,6 +1,7 @@
 services:
   myinstants-bot:
     image: ${MYINSTANTS_IMAGE:-ghcr.io/mgiovani/my-instants-discord-bot:latest}
+    pull_policy: always
     restart: always
     stop_grace_period: 15s
     mem_limit: 512m

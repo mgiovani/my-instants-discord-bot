@@ -4,6 +4,9 @@ services:
       context: .
       dockerfile: Dockerfile
     image: myinstants-bot:dev
+    # Override the prod pull_policy so local dev builds instead of trying to
+    # pull the never-published :dev image.
+    pull_policy: build
     environment:
       MYINSTANTS_ENV: dev
       MYINSTANTS_LOG_FORMAT: pretty
