@@ -97,17 +97,14 @@ class InstantsCrawler:
         return self._session
 
     async def _fetch_soup(self, url: str) -> BeautifulSoup:
-        session = await self._get_session()
+        body = await self._get_with_retry(url)
+        return BeautifulSoup(body, 'html.parser')
+
+    async def _get_with_retry(self, url: str) -> bytes:
         last_exc: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:
-                async with (
-                    self._limiter,
-                    session.get(url, timeout=self._timeout) as response,
-                ):
-                    response.raise_for_status()
-                    body = await response.read()
-                return BeautifulSoup(body, 'html.parser')
+                return await self._get_body(url)
             except aiohttp.ClientResponseError as exc:
                 if exc.status < 500:
                     raise CrawlerHTTPError(f'GET {url} failed: {exc}') from exc
@@ -124,6 +121,15 @@ class InstantsCrawler:
             f'GET {url} failed after retries: {last_exc}'
         ) from last_exc
 
+    async def _get_body(self, url: str) -> bytes:
+        session = await self._get_session()
+        async with (
+            self._limiter,
+            session.get(url, timeout=self._timeout) as response,
+        ):
+            response.raise_for_status()
+            return await response.read()
+
     async def search(self, query: str) -> list[InstantSummary]:
         cleaned = query.strip()
         key = cleaned.lower()
@@ -135,6 +141,13 @@ class InstantsCrawler:
         soup = await self._fetch_soup(
             f'{_BASE_URL}/search?name={cleaned}',
         )
+        results = self._parse_search_results(soup)
+        await self._search_cache.set(key, results)
+        return results
+
+    def _parse_search_results(
+        self, soup: BeautifulSoup
+    ) -> list[InstantSummary]:
         instants = soup.select('.instant')
         results: list[InstantSummary] = []
         for tag in instants:
@@ -150,7 +163,6 @@ class InstantsCrawler:
             raise CrawlerParseError(
                 'No search results could be parsed (layout may have changed)'
             )
-        await self._search_cache.set(key, results)
         return results
 
     async def first_match(self, query: str) -> InstantSummary:
