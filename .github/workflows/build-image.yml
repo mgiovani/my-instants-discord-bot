@@ -57,3 +57,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
+
+      # Trigger the Dokploy deploy only after the image is pushed. On-push
+      # autodeploy races this build and pulls the previous :latest, so Dokploy
+      # autodeploy must be OFF and this webhook is the sole deploy trigger.
+      - name: Trigger Dokploy deploy
+        if: github.ref == 'refs/heads/main'
+        env:
+          DEPLOY_HOOK: ${{ secrets.DOKPLOY_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::error::DOKPLOY_DEPLOY_HOOK secret is not set." >&2
+            exit 1
+          fi
+          curl -fsS -X POST "$DEPLOY_HOOK"
+          echo "Triggered Dokploy deploy."
