@@ -61,6 +61,8 @@ class MyInstantsBot(commands.Bot):
             search_ttl_seconds=settings.cache_search_ttl_seconds,
             details_ttl_seconds=settings.cache_details_ttl_seconds,
             rate_limit_per_sec=settings.myinstants_rate_limit_per_sec,
+            max_retries=settings.myinstants_max_retries,
+            retry_backoff_seconds=settings.myinstants_retry_backoff_seconds,
         )
         self.voice_states = GuildVoiceStateManager(settings)
         self._heartbeat = None
@@ -140,6 +142,17 @@ class MyInstantsBot(commands.Bot):
                 user=user,
                 user_id=user.id,
             )
+
+    async def on_voice_state_update(
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+    ) -> None:
+        if self.user is None or member.id != self.user.id:
+            return
+        if before.channel is not None and after.channel is None:
+            self.voice_states.invalidate(before.channel.guild.id)
 
 
 def _sentry_capture_async(error: BaseException) -> None:

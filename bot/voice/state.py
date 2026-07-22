@@ -162,12 +162,15 @@ class GuildVoiceState:
 
     async def _play_current(self, song: Song, *, announce: bool) -> None:
         voice = self.voice
-        if voice is None:
+        if voice is None or not voice.is_connected():
             logger.warning(
                 'No voice client for guild {guild_id}, dropping song',
                 guild_id=self.guild_id,
             )
             self._next_event.set()
+            # Yield so a pending invalidate()/close() can set _closed and stop
+            # the loop, instead of synchronously draining the whole queue.
+            await asyncio.sleep(0)
             return
         voice.play(song.source, after=self._on_after_play)
         if announce and self._notify is not None:

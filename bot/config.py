@@ -47,6 +47,10 @@ class Settings(BaseSettings):
         default=5.0, ge=1.0, le=30.0
     )
     myinstants_rate_limit_per_sec: float = Field(default=5.0, ge=0.1, le=50.0)
+    myinstants_max_retries: int = Field(default=2, ge=0, le=5)
+    myinstants_retry_backoff_seconds: float = Field(
+        default=0.5, ge=0.0, le=10.0
+    )
     cache_search_ttl_seconds: int = Field(default=600, ge=1, le=86400)
     cache_details_ttl_seconds: int = Field(default=3600, ge=1, le=86400)
 

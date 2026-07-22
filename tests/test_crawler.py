@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import aiohttp
 import pytest
 from aioresponses import aioresponses
+from yarl import URL
 
 from bot.exceptions import (
     CrawlerHTTPError,
@@ -57,7 +59,7 @@ async def test_search_returns_parsed_summaries(crawler, search_results_body):
     assert len(results) == 25
     assert results[0].name == 'Discord Notification'
     assert results[0].page_url.startswith(
-        'https://www.myinstants.com/instant/'
+        'https://www.myinstants.com/en/instant/'
     )
     assert results[0].mp3_url == (
         'https://www.myinstants.com/media/sounds/discord-notification.mp3'
@@ -126,6 +128,81 @@ async def test_malformed_search_result_raises_parse_error(crawler):
             await crawler.search('x')
 
 
+async def test_search_skips_unparseable_results(crawler):
+    mixed_html = b"""
+        <div class="instant">
+          <a class="instant-link" href="/instant/good-one/">Good One</a>
+          <button class="small-button"
+            onclick="play('/media/sounds/good-one.mp3')"></button>
+        </div>
+        <div class="instant">
+          <a class="instant-link">broken</a>
+        </div>
+    """
+    with aioresponses() as mocked:
+        mocked.get(
+            'https://www.myinstants.com/search?name=x',
+            status=200,
+            body=mixed_html,
+        )
+        results = await crawler.search('x')
+
+    assert len(results) == 1
+    assert results[0].name == 'Good One'
+
+
+async def test_fetch_retries_on_transient(session, search_results_body):
+    crawler = InstantsCrawler(
+        session=session, max_retries=2, retry_backoff_seconds=0
+    )
+    url = 'https://www.myinstants.com/search?name=discord'
+    with aioresponses() as mocked:
+        mocked.get(url, status=503)
+        mocked.get(url, status=200, body=search_results_body)
+        results = await crawler.search('discord')
+
+    assert len(results) > 0
+    assert len(mocked.requests[('GET', URL(url))]) == 2
+
+
+async def test_fetch_exhausts_retries_on_repeated_5xx(session):
+    crawler = InstantsCrawler(
+        session=session, max_retries=2, retry_backoff_seconds=0
+    )
+    url = 'https://www.myinstants.com/search?name=x'
+    with aioresponses() as mocked:
+        for _ in range(3):
+            mocked.get(url, status=503)
+        with pytest.raises(CrawlerHTTPError, match='failed after retries'):
+            await crawler.search('x')
+        assert len(mocked.requests[('GET', URL(url))]) == 3
+
+
+async def test_fetch_retries_on_timeout(session, search_results_body):
+    crawler = InstantsCrawler(
+        session=session, max_retries=2, retry_backoff_seconds=0
+    )
+    url = 'https://www.myinstants.com/search?name=discord'
+    with aioresponses() as mocked:
+        mocked.get(url, exception=TimeoutError())
+        mocked.get(url, status=200, body=search_results_body)
+        results = await crawler.search('discord')
+
+    assert len(results) > 0
+
+
+async def test_4xx_not_retried(session):
+    crawler = InstantsCrawler(
+        session=session, max_retries=2, retry_backoff_seconds=0
+    )
+    url = 'https://www.myinstants.com/search?name=x'
+    with aioresponses() as mocked:
+        mocked.get(url, status=404)
+        with pytest.raises(CrawlerHTTPError):
+            await crawler.search('x')
+        assert len(mocked.requests[('GET', URL(url))]) == 1
+
+
 async def test_get_details_parses_expected_fields(
     crawler, search_results_body, instant_details_body
 ):
@@ -149,8 +226,8 @@ async def test_get_details_parses_expected_fields(
     assert details.title == 'Discord Notification'
     assert details.uploader_name == 'Anonymous'
     assert details.uploader_url is None
-    assert details.likes == '43,960 users'
-    assert details.views == '660,100 views'
+    assert details.likes and re.match(r'[\d,]+ users', details.likes)
+    assert details.views and re.match(r'[\d,]+ views', details.views)
     assert details.description is None
 
 

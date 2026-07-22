@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -65,6 +66,8 @@ class InstantsCrawler:
         search_ttl_seconds: int = 600,
         details_ttl_seconds: int = 3600,
         rate_limit_per_sec: float = 5.0,
+        max_retries: int = 2,
+        retry_backoff_seconds: float = 0.5,
     ) -> None:
         self._owns_session = session is None
         self._timeout = aiohttp.ClientTimeout(
@@ -80,6 +83,8 @@ class InstantsCrawler:
             Cache.MEMORY, ttl=details_ttl_seconds
         )
         self._limiter = AsyncLimiter(max(rate_limit_per_sec, 0.1), 1.0)
+        self._max_retries = max_retries
+        self._retry_backoff_seconds = retry_backoff_seconds
 
     async def aclose(self) -> None:
         if self._owns_session and self._session is not None:
@@ -92,17 +97,38 @@ class InstantsCrawler:
         return self._session
 
     async def _fetch_soup(self, url: str) -> BeautifulSoup:
-        session = await self._get_session()
-        try:
-            async with (
-                self._limiter,
-                session.get(url, timeout=self._timeout) as response,
-            ):
-                response.raise_for_status()
-                body = await response.read()
-        except aiohttp.ClientError as exc:
-            raise CrawlerHTTPError(f'GET {url} failed: {exc}') from exc
+        body = await self._get_with_retry(url)
         return BeautifulSoup(body, 'html.parser')
+
+    async def _get_with_retry(self, url: str) -> bytes:
+        last_exc: Exception | None = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                return await self._get_body(url)
+            except aiohttp.ClientResponseError as exc:
+                if exc.status < 500:
+                    raise CrawlerHTTPError(f'GET {url} failed: {exc}') from exc
+                last_exc = exc
+            except (aiohttp.ClientError, TimeoutError) as exc:
+                # aiohttp's total timeout raises a bare asyncio.TimeoutError,
+                # not a ClientError, so catch it to retry slow responses.
+                last_exc = exc
+            if attempt < self._max_retries:
+                await asyncio.sleep(
+                    self._retry_backoff_seconds * (attempt + 1)
+                )
+        raise CrawlerHTTPError(
+            f'GET {url} failed after retries: {last_exc}'
+        ) from last_exc
+
+    async def _get_body(self, url: str) -> bytes:
+        session = await self._get_session()
+        async with (
+            self._limiter,
+            session.get(url, timeout=self._timeout) as response,
+        ):
+            response.raise_for_status()
+            return await response.read()
 
     async def search(self, query: str) -> list[InstantSummary]:
         cleaned = query.strip()
@@ -115,9 +141,28 @@ class InstantsCrawler:
         soup = await self._fetch_soup(
             f'{_BASE_URL}/search?name={cleaned}',
         )
-        instants = soup.select('.instant')[: self._search_limit]
-        results = [self._parse_summary(tag) for tag in instants]
+        results = self._parse_search_results(soup)
         await self._search_cache.set(key, results)
+        return results
+
+    def _parse_search_results(
+        self, soup: BeautifulSoup
+    ) -> list[InstantSummary]:
+        instants = soup.select('.instant')
+        results: list[InstantSummary] = []
+        for tag in instants:
+            if len(results) == self._search_limit:
+                break
+            try:
+                results.append(self._parse_summary(tag))
+            except CrawlerParseError as exc:
+                logger.warning(
+                    'Skipping unparseable search result: {exc}', exc=exc
+                )
+        if instants and not results:
+            raise CrawlerParseError(
+                'No search results could be parsed (layout may have changed)'
+            )
         return results
 
     async def first_match(self, query: str) -> InstantSummary:
