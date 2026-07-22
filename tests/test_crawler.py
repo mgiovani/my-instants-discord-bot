@@ -151,6 +151,28 @@ async def test_search_skips_unparseable_results(crawler):
     assert results[0].name == 'Good One'
 
 
+async def test_search_parses_uppercase_mp3_extension(crawler):
+    # MyInstants serves some clips with an uppercase .MP3 extension; the URL
+    # regex must match case-insensitively or a valid card looks unparseable.
+    html = b"""
+        <div class="instant">
+          <a class="instant-link" href="/instant/test-your-might/">Might</a>
+          <button class="small-button"
+            onclick="play('/media/sounds/test-your-might.MP3')"></button>
+        </div>
+    """
+    with aioresponses() as mocked:
+        mocked.get(
+            'https://www.myinstants.com/search?name=x',
+            status=200,
+            body=html,
+        )
+        results = await crawler.search('x')
+
+    assert len(results) == 1
+    assert results[0].mp3_url.endswith('/media/sounds/test-your-might.MP3')
+
+
 async def test_fetch_retries_on_transient(session, search_results_body):
     crawler = InstantsCrawler(
         session=session, max_retries=2, retry_backoff_seconds=0
@@ -229,6 +251,19 @@ async def test_get_details_parses_expected_fields(
     assert details.likes and re.match(r'[\d,]+ users', details.likes)
     assert details.views and re.match(r'[\d,]+ views', details.views)
     assert details.description is None
+
+
+def test_parse_views_matches_singular_and_plural():
+    from bs4 import BeautifulSoup
+
+    from crawler.instants import _parse_views
+
+    for text, expected in [('1 view', '1 view'), ('42 views', '42 views')]:
+        soup = BeautifulSoup(
+            f'<div id="instant-page-likes"></div><div>{text}</div>',
+            'html.parser',
+        )
+        assert _parse_views(soup) == expected
 
 
 async def test_to_ytdl_data_shape(crawler, instant_details_body):

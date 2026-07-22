@@ -22,8 +22,8 @@ if TYPE_CHECKING:
 
 
 _BASE_URL = 'https://www.myinstants.com'
-_MP3_PATH_RE = re.compile(r'/media[^\s"\']+\.mp3')
-_VIEWS_RE = re.compile(r'[\d,]+\s*views', re.IGNORECASE)
+_MP3_PATH_RE = re.compile(r'/media[^\s"\']+\.mp3', re.IGNORECASE)
+_VIEWS_RE = re.compile(r'[\d,]+\s*views?', re.IGNORECASE)
 
 
 @dataclass(frozen=True, slots=True)
