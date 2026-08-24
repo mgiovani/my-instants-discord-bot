@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 import discord
 from discord import Activity, ActivityType, Intents
@@ -31,6 +31,7 @@ from crawler.instants import InstantsCrawler
 
 if TYPE_CHECKING:
     from bot.config import Settings
+    from bot.logging_setup import HeartbeatLoop
 
 
 def build_intents() -> Intents:
@@ -65,9 +66,10 @@ class MyInstantsBot(commands.Bot):
             retry_backoff_seconds=settings.myinstants_retry_backoff_seconds,
         )
         self.voice_states = GuildVoiceStateManager(settings)
-        self._heartbeat = None
+        self._heartbeat: HeartbeatLoop | None = None
 
-    async def setup_hook(self) -> None:  # type: ignore[override]
+    @override
+    async def setup_hook(self) -> None:
         install_error_handler(self.tree, sentry_capture=_sentry_capture_async)
         self._heartbeat = start_heartbeat(self.settings)
 

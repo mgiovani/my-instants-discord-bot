@@ -3,18 +3,26 @@ from __future__ import annotations
 import json
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from types import CoroutineType
+from typing import TYPE_CHECKING, Any, override
 
 from discord.ext import tasks
 from loguru import logger
 
 if TYPE_CHECKING:
+    from loguru import Message
+
     from bot.config import Settings
+
+type HeartbeatLoop = tasks.Loop[Callable[[], CoroutineType[Any, Any, None]]]
 
 
 class _InterceptHandler(logging.Handler):
+    @override
     def emit(self, record: logging.LogRecord) -> None:
+        level: int | str
         try:
             level = logger.level(record.levelname).name
         except ValueError:
@@ -60,20 +68,16 @@ def configure_logging(settings: Settings) -> None:
     logging.getLogger('discord.gateway').setLevel(logging.WARNING)
 
 
-def _json_sink(message: object) -> None:
-    record = getattr(message, 'record', None)
-    if record is None:
-        sys.stderr.write(str(message))
-        return
-    extra = record.get('extra') or {}
+def _json_sink(message: Message) -> None:
+    record = message.record
     payload: dict[str, object] = {
         'ts': record['time'].isoformat(),
         'level': record['level'].name,
         'logger': (f'{record["name"]}:{record["function"]}:{record["line"]}'),
         'message': record['message'],
-        **{str(k): _jsonable(v) for k, v in dict(extra).items()},
+        **{str(k): _jsonable(v) for k, v in record['extra'].items()},
     }
-    if record.get('exception'):
+    if record['exception']:
         payload['exception'] = str(record['exception'])
     sys.stderr.write(json.dumps(payload, default=str) + '\n')
     sys.stderr.flush()
@@ -116,7 +120,7 @@ def capture_exception(error: BaseException) -> None:
     sentry_sdk.capture_exception(error)
 
 
-def start_heartbeat(settings: Settings) -> tasks.Loop:
+def start_heartbeat(settings: Settings) -> HeartbeatLoop:
     path = Path(settings.heartbeat_file)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.touch(exist_ok=True)

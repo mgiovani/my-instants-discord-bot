@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -176,7 +177,7 @@ async def test_play_history_prune(session_factory):
         id_ = row.id
         past = datetime.now(UTC) - timedelta(days=400)
         await session.execute(
-            PlayHistory.__table__.update()
+            update(PlayHistory)
             .where(PlayHistory.id == id_)
             .values(played_at=past)
         )
