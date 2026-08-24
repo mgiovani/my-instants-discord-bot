@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import discord
 from discord.ext import commands
@@ -35,7 +35,9 @@ class BotCogBase(commands.Cog):
         state = await self.voice_states.get_or_create(interaction.guild_id)
         channel = interaction.channel
         if channel is not None and hasattr(channel, 'send'):
-            send = channel.send
+            # channel is narrowed by hasattr, not isinstance, so it also
+            # matches test doubles that duck-type a Messageable channel.
+            send = cast(discord.abc.Messageable, channel).send
 
             async def notify(embed: discord.Embed) -> None:
                 await send(embed=embed)
@@ -66,7 +68,7 @@ class BotCogBase(commands.Cog):
         live = interaction.guild.voice_client if interaction.guild else None
 
         if isinstance(live, discord.VoiceClient) and live.is_connected():
-            if live.channel is not None and live.channel.id != target.id:
+            if live.channel.id != target.id:
                 await live.move_to(target)
             state.voice = live
             return live

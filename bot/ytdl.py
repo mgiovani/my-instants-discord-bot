@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import functools
-import subprocess
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypedDict, cast, override
 
 import discord
 import yt_dlp
+import yt_dlp.utils
 from loguru import logger
 
 from bot.exceptions import YTDLError
@@ -15,7 +15,12 @@ if TYPE_CHECKING:
     from bot.config import Settings
     from crawler.instants import InstantDetails
 
-yt_dlp.utils.bug_reports_message = lambda *_args, **_kwargs: ''
+
+def _suppress_bug_reports_message(*_args: object, **_kwargs: object) -> str:
+    return ''
+
+
+yt_dlp.utils.bug_reports_message = _suppress_bug_reports_message
 
 
 _YTDL_OPTIONS: dict[str, Any] = {
@@ -30,7 +35,12 @@ _YTDL_OPTIONS: dict[str, Any] = {
 }
 
 
-_FFMPEG_OPTIONS: dict[str, str] = {
+class _FFmpegOptions(TypedDict):
+    before_options: str
+    options: str
+
+
+_FFMPEG_OPTIONS: _FFmpegOptions = {
     'before_options': (
         '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
     ),
@@ -38,10 +48,12 @@ _FFMPEG_OPTIONS: dict[str, str] = {
 }
 
 
-_ytdl = yt_dlp.YoutubeDL(_YTDL_OPTIONS)
+# yt_dlp ships no py.typed marker; the bundled typeshed stub only exposes
+# its private, type-check-only `_Params` for this parameter.
+_ytdl = yt_dlp.YoutubeDL(cast(Any, _YTDL_OPTIONS))
 
 
-class YTDLSource(discord.PCMVolumeTransformer):
+class YTDLSource(discord.PCMVolumeTransformer[discord.FFmpegPCMAudio]):
     def __init__(
         self,
         *,
@@ -74,6 +86,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
             else None
         )
 
+    @override
     def __str__(self) -> str:
         return f'**{self.title}** by **{self.uploader}**'
 
@@ -109,7 +122,9 @@ class YTDLSource(discord.PCMVolumeTransformer):
         except yt_dlp.utils.DownloadError as exc:
             raise YTDLError(f'Could not fetch {url}: {exc}') from exc
 
-        if info is None:
+        # yt_dlp's stub types extract_info as always returning a dict, but
+        # the real implementation returns None when no extractor matches.
+        if info is None:  # pyright: ignore[reportUnnecessaryComparison]
             raise YTDLError(f'Could not fetch {url}')
 
         merged: dict[str, Any] = {**info, **instant_details.to_ytdl_data()}
@@ -130,7 +145,6 @@ def _spawn_ffmpeg(stream_url: str) -> discord.FFmpegPCMAudio:
     try:
         return discord.FFmpegPCMAudio(
             stream_url,
-            stderr=subprocess.PIPE,
             **_FFMPEG_OPTIONS,
         )
     except discord.ClientException as exc:

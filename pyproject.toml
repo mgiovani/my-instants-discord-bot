@@ -109,15 +109,17 @@ known-first-party = ['bot', 'crawler']
 include = ['bot', 'crawler', 'tests']
 exclude = ['**/__pycache__', '.venv', 'bot/db/migrations/versions']
 pythonVersion = '3.12'
-typeCheckingMode = 'basic'
+typeCheckingMode = 'standard'
+# Strict only where we own the code. Tests stay at standard: full strict there
+# is ~480 errors of untyped test functions, which ruff already exempts via
+# per-file-ignores for ANN.
+strict = ['bot', 'crawler']
 reportMissingImports = 'error'
 reportMissingTypeStubs = 'none'
 reportImplicitOverride = 'warning'
 reportUnnecessaryTypeIgnoreComment = 'warning'
-# External libs with weak type coverage surface attribute/argument issues
-# whose errors would otherwise flood CI. Ratchet back up once stubs improve.
-reportAttributeAccessIssue = 'warning'
-reportArgumentType = 'warning'
+reportAttributeAccessIssue = 'error'
+reportArgumentType = 'error'
 
 [tool.pytest.ini_options]
 asyncio_mode = 'auto'

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.engine import CursorResult
 
 from bot.db.models import (
     Favorite as FavoriteRow,
@@ -177,15 +178,18 @@ class FavoriteRepository:
         self, *, user_hash: str, guild_hash: str, instant_id: str
     ) -> bool:
         async with _session(self._session_factory) as session:
-            result = await session.execute(
-                delete(FavoriteRow).where(
-                    FavoriteRow.user_hash == user_hash,
-                    FavoriteRow.guild_hash == guild_hash,
-                    FavoriteRow.instant_id == instant_id,
-                )
+            result = cast(
+                CursorResult[Any],
+                await session.execute(
+                    delete(FavoriteRow).where(
+                        FavoriteRow.user_hash == user_hash,
+                        FavoriteRow.guild_hash == guild_hash,
+                        FavoriteRow.instant_id == instant_id,
+                    )
+                ),
             )
             await session.commit()
-            return (result.rowcount or 0) > 0
+            return result.rowcount > 0
 
     async def _get_by_natural_key(
         self,
@@ -296,11 +300,16 @@ class PlayHistoryRepository:
     async def prune_older_than(self, *, days: int) -> int:
         cutoff = datetime.now(UTC) - timedelta(days=days)
         async with _session(self._session_factory) as session:
-            result = await session.execute(
-                delete(PlayHistoryRow).where(PlayHistoryRow.played_at < cutoff)
+            result = cast(
+                CursorResult[Any],
+                await session.execute(
+                    delete(PlayHistoryRow).where(
+                        PlayHistoryRow.played_at < cutoff
+                    )
+                ),
             )
             await session.commit()
-            return result.rowcount or 0
+            return result.rowcount
 
 
 def _fav_to_dto(row: FavoriteRow) -> FavoriteDTO:

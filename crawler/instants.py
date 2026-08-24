@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol, cast
 
 import aiohttp
-from aiocache import BaseCache, Cache
+from aiocache import Cache  # pyright: ignore[reportMissingTypeStubs]
 from aiolimiter import AsyncLimiter
 from bs4 import BeautifulSoup, Tag
 from loguru import logger
@@ -53,6 +53,13 @@ class InstantDetails:
         }
 
 
+class _AsyncCache(Protocol):
+    """Typed view of the aiocache methods we use (aiocache has no stubs)."""
+
+    async def get(self, key: str) -> object | None: ...
+    async def set(self, key: str, value: object) -> None: ...
+
+
 class InstantsCrawler:
     BASE_URL = _BASE_URL
 
@@ -76,10 +83,10 @@ class InstantsCrawler:
         )
         self._session = session
         self._search_limit = search_limit
-        self._search_cache: BaseCache = Cache(
+        self._search_cache: _AsyncCache = Cache(
             Cache.MEMORY, ttl=search_ttl_seconds
         )
-        self._details_cache: BaseCache = Cache(
+        self._details_cache: _AsyncCache = Cache(
             Cache.MEMORY, ttl=details_ttl_seconds
         )
         self._limiter = AsyncLimiter(max(rate_limit_per_sec, 0.1), 1.0)
@@ -133,7 +140,10 @@ class InstantsCrawler:
     async def search(self, query: str) -> list[InstantSummary]:
         cleaned = query.strip()
         key = cleaned.lower()
-        cached = await self._search_cache.get(key)
+        cached = cast(
+            'list[InstantSummary] | None',
+            await self._search_cache.get(key),
+        )
         if cached is not None:
             logger.debug('Cache hit: search {key!r}', key=key)
             return cached
@@ -173,7 +183,9 @@ class InstantsCrawler:
 
     async def get_details(self, instant: InstantSummary) -> InstantDetails:
         key = instant.page_url
-        cached = await self._details_cache.get(key)
+        cached = cast(
+            'InstantDetails | None', await self._details_cache.get(key)
+        )
         if cached is not None:
             logger.debug('Cache hit: details {key!r}', key=key)
             return cached
