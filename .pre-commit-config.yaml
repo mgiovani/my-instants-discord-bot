@@ -32,4 +32,4 @@ repos:
           - 'aiohttp~=3.11'
           - 'beautifulsoup4~=4.13'
           - 'loguru~=0.7.3'
-          - 'pytest~=8.3'
+          - 'pytest~=9.0'

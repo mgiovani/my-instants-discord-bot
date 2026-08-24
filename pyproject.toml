@@ -24,8 +24,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    'pytest~=8.3',
-    'pytest-asyncio~=0.25',
+    'pytest~=9.0',
+    'pytest-asyncio~=1.4',
     'pytest-cov~=6.0',
     'pytest-mock~=3.14',
     'aioresponses~=0.7',
@@ -34,6 +34,13 @@ dev = [
     'pre-commit~=4.0',
     'pip-audit~=2.7',
 ]
+
+[tool.uv]
+# discord-py 2.7.1 pins PyNaCl<1.6, but 1.6.2 fixes CVE-2025-69277 and its
+# only breaking change vs 1.5 is dropping Python 3.6/3.7 (irrelevant here).
+# Capped at <2.0 so this override can't silently jump a future major
+# release past what discord-py's voice code has been tested against.
+override-dependencies = ['pynacl>=1.6.2,<2.0']
 
 [project.urls]
 Homepage = 'https://github.com/mgiovani/my-instants-discord-bot'
@@ -114,6 +121,7 @@ reportArgumentType = 'warning'
 
 [tool.pytest.ini_options]
 asyncio_mode = 'auto'
+asyncio_default_fixture_loop_scope = 'function'
 testpaths = ['tests']
 addopts = [
     '-ra',
