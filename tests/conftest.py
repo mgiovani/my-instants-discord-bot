@@ -22,8 +22,6 @@ class FakeResponse:
 
 
 class FakeSession:
-    """Fake curl_cffi AsyncSession: queues canned responses/errors per URL."""
-
     def __init__(self) -> None:
         self._queues: dict[str, list[FakeResponse | Exception]] = {}
         self.calls: list[tuple[str, str, tuple[float, float]]] = []
@@ -36,7 +34,7 @@ class FakeSession:
         url: str,
         *,
         impersonate: str,
-        timeout: tuple[float, float],  # noqa: ASYNC109 -- curl_cffi's name
+        timeout: tuple[float, float],  # noqa: ASYNC109
     ) -> FakeResponse:
         self.calls.append((url, impersonate, timeout))
         queue = self._queues.get(url)

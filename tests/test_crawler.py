@@ -62,10 +62,6 @@ async def test_search_returns_parsed_summaries(
 async def test_search_sends_browser_impersonation(
     crawler, session, search_results_body
 ):
-    # Guards the Cloudflare TLS-fingerprint workaround: nothing else in this
-    # suite inspects the kwargs passed to session.get(), so deleting
-    # `impersonate=` from _get_body (reverting the fix this branch exists
-    # for) would otherwise leave the whole suite green.
     url = 'https://www.myinstants.com/search?name=discord'
     session.queue(url, FakeResponse(200, search_results_body))
     await crawler.search('discord')

@@ -9,16 +9,8 @@ authors = [{ name = 'Giovani Moutinho', email = 'e@giovani.dev' }]
 dependencies = [
     'discord-py[voice]>=2.7.1,<2.8',
     'yt-dlp>=2025.1.15',
-    # myinstants.com sits behind a Cloudflare WAF that 403s any client
-    # whose TLS/HTTP2 fingerprint isn't a real browser; headers alone
-    # don't get through. curl-cffi impersonates one. yt-dlp also picks
-    # it up automatically and retries its own 403s with impersonation.
     'curl-cffi~=0.16',
     'beautifulsoup4~=4.13',
-    # Nothing imports aiohttp directly any more (curl-cffi replaced it in
-    # crawler/instants.py), but it still arrives transitively via
-    # discord-py[voice]. Kept as a deliberate security floor so a future
-    # resolve can't silently pick an old, pre-CVE-sweep aiohttp.
     'aiohttp~=3.11',
     'loguru~=0.7.3',
     'pydantic~=2.10',

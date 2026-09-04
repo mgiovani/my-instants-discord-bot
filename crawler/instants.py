@@ -25,8 +25,6 @@ if TYPE_CHECKING:
 _BASE_URL = 'https://www.myinstants.com'
 _MP3_PATH_RE = re.compile(r'/media[^\s"\']+\.mp3', re.IGNORECASE)
 _VIEWS_RE = re.compile(r'[\d,]+\s*views?', re.IGNORECASE)
-# Cloudflare 403s any client whose TLS fingerprint isn't a real browser;
-# a full browser header set alone does not get through.
 _IMPERSONATE = 'chrome'
 
 
@@ -70,15 +68,12 @@ class _HTTPResponse(Protocol):
 
 
 class _AsyncClientSession(Protocol):
-    """Typed view of the curl_cffi session methods we use (lets a
-    structural test double stand in without subclassing AsyncSession)."""
-
     async def get(
         self,
         url: str,
         *,
         impersonate: str,
-        timeout: tuple[float, float],  # noqa: ASYNC109 -- curl_cffi's name
+        timeout: tuple[float, float],  # noqa: ASYNC109
     ) -> _HTTPResponse: ...
     async def close(self) -> None: ...
 
@@ -102,8 +97,6 @@ class InstantsCrawler:
         self._owns_session = session is None
         self._timeout: tuple[float, float] = (
             connect_timeout_seconds,
-            # curl_cffi sums the tuple into one ceiling, so the read half
-            # is the remaining budget, not the full total.
             max(timeout_seconds - connect_timeout_seconds, 0.0),
         )
         self._session: _AsyncClientSession | None = session
