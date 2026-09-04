@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import Mock
+from typing import Any, cast
 
 import pytest
-from aiohttp.client_reqrep import ClientResponse
+from curl_cffi import AsyncSession
+from curl_cffi.requests import Response
+
+from crawler.instants import InstantsCrawler
 
 os.environ.setdefault('MYINSTANTS_BOT_TOKEN', 'test-token')
 os.environ.setdefault('MYINSTANTS_ENV', 'dev')
@@ -14,23 +17,56 @@ os.environ.setdefault(
 )
 
 
-# ponytail: aiohttp 3.14 added a required keyword-only `stream_writer`
-# argument to ClientResponse.__init__ (only its `.output_size` is read).
-# aioresponses 0.7.9 (latest release) doesn't pass it yet — fix is merged
-# upstream but unreleased (github.com/pnuckowski/aioresponses/pull/288).
-# Default it for the test session instead of pinning an unreleased git
-# commit as a dependency. Drop this fixture once aioresponses ships that
-# fix in a release and aioresponses~=0.7 is bumped past it.
-@pytest.fixture(autouse=True, scope='session')
-def _aioresponses_stream_writer_default():
-    init = ClientResponse.__init__
-    original = init.__kwdefaults__
-    init.__kwdefaults__ = {
-        **(original or {}),
-        'stream_writer': Mock(spec=['output_size'], output_size=0),
-    }
-    yield
-    init.__kwdefaults__ = original
+class FakeResponse:
+    def __init__(self, status_code: int, content: bytes = b'') -> None:
+        self.status_code = status_code
+        self.content = content
+
+
+class FakeSession:
+    """Fake curl_cffi AsyncSession: queues canned responses/errors per URL.
+
+    Queued items are consumed in order; once a URL's queue is down to its
+    last item, that item is returned for every further call (mirrors a
+    "register a response for this endpoint" mock without needing tests to
+    guess how many retry attempts will hit it).
+    """
+
+    def __init__(self) -> None:
+        self._queues: dict[str, list[FakeResponse | Exception]] = {}
+        self.requests: list[str] = []
+
+    def queue(self, url: str, *items: FakeResponse | Exception) -> None:
+        self._queues.setdefault(url, []).extend(items)
+
+    async def get(self, url: str, **_kwargs: object) -> FakeResponse:
+        self.requests.append(url)
+        queue = self._queues.get(url)
+        if not queue:
+            raise AssertionError(f'FakeSession: no queued response for {url}')
+        item = queue.pop(0) if len(queue) > 1 else queue[0]
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    def request_count(self, url: str) -> int:
+        return self.requests.count(url)
+
+    async def close(self) -> None:
+        pass
+
+
+@pytest.fixture
+def session() -> FakeSession:
+    return FakeSession()
+
+
+def build_crawler(session: FakeSession, **kwargs: Any) -> InstantsCrawler:
+    # The fake only mimics curl_cffi's AsyncSession.get() interface, so tell
+    # pyright to trust it rather than making it a real subclass.
+    return InstantsCrawler(
+        session=cast(AsyncSession[Response], session), **kwargs
+    )
 
 
 @pytest.fixture

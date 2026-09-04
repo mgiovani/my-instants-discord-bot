@@ -5,10 +5,11 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, cast
 
-import aiohttp
 from aiocache import Cache  # pyright: ignore[reportMissingTypeStubs]
 from aiolimiter import AsyncLimiter
 from bs4 import BeautifulSoup, Tag
+from curl_cffi import AsyncSession, CurlError
+from curl_cffi.requests import Response
 from loguru import logger
 
 from bot.exceptions import (
@@ -66,7 +67,7 @@ class InstantsCrawler:
     def __init__(
         self,
         *,
-        session: aiohttp.ClientSession | None = None,
+        session: AsyncSession[Response] | None = None,
         timeout_seconds: float = 10.0,
         connect_timeout_seconds: float = 5.0,
         search_limit: int = 25,
@@ -75,13 +76,19 @@ class InstantsCrawler:
         rate_limit_per_sec: float = 5.0,
         max_retries: int = 2,
         retry_backoff_seconds: float = 0.5,
+        impersonate: str = 'chrome',
     ) -> None:
         self._owns_session = session is None
-        self._timeout = aiohttp.ClientTimeout(
-            total=timeout_seconds,
-            connect=connect_timeout_seconds,
+        self._timeout: tuple[float, float] = (
+            connect_timeout_seconds,
+            timeout_seconds,
         )
         self._session = session
+        # ponytail: myinstants.com's Cloudflare WAF hard-blocks any client
+        # whose TLS/HTTP2 fingerprint isn't a real browser (403), even with
+        # a full browser header set. curl_cffi's `impersonate` fakes the
+        # fingerprint itself, which is the only thing that gets us a 200.
+        self._impersonate = impersonate
         self._search_limit = search_limit
         self._search_cache: _AsyncCache = Cache(
             Cache.MEMORY, ttl=search_ttl_seconds
@@ -98,9 +105,9 @@ class InstantsCrawler:
             await self._session.close()
             self._session = None
 
-    async def _get_session(self) -> aiohttp.ClientSession:
+    async def _get_session(self) -> AsyncSession[Response]:
         if self._session is None:
-            self._session = aiohttp.ClientSession(timeout=self._timeout)
+            self._session = AsyncSession[Response]()
         return self._session
 
     async def _fetch_soup(self, url: str) -> BeautifulSoup:
@@ -111,15 +118,17 @@ class InstantsCrawler:
         last_exc: Exception | None = None
         for attempt in range(self._max_retries + 1):
             try:
-                return await self._get_body(url)
-            except aiohttp.ClientResponseError as exc:
-                if exc.status < 500:
-                    raise CrawlerHTTPError(f'GET {url} failed: {exc}') from exc
+                response = await self._get_body(url)
+            except CurlError as exc:
                 last_exc = exc
-            except (aiohttp.ClientError, TimeoutError) as exc:
-                # aiohttp's total timeout raises a bare asyncio.TimeoutError,
-                # not a ClientError, so catch it to retry slow responses.
-                last_exc = exc
+            else:
+                if response.status_code < 400:
+                    return response.content
+                if response.status_code < 500:
+                    raise CrawlerHTTPError(
+                        f'GET {url} failed: HTTP {response.status_code}'
+                    )
+                last_exc = CrawlerHTTPError(f'HTTP {response.status_code}')
             if attempt < self._max_retries:
                 await asyncio.sleep(
                     self._retry_backoff_seconds * (attempt + 1)
@@ -128,14 +137,12 @@ class InstantsCrawler:
             f'GET {url} failed after retries: {last_exc}'
         ) from last_exc
 
-    async def _get_body(self, url: str) -> bytes:
+    async def _get_body(self, url: str) -> Response:
         session = await self._get_session()
-        async with (
-            self._limiter,
-            session.get(url, timeout=self._timeout) as response,
-        ):
-            response.raise_for_status()
-            return await response.read()
+        async with self._limiter:
+            return await session.get(
+                url, impersonate=self._impersonate, timeout=self._timeout
+            )
 
     async def search(self, query: str) -> list[InstantSummary]:
         cleaned = query.strip()
