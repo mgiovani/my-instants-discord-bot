@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import Mock
+from typing import Any
 
 import pytest
-from aiohttp.client_reqrep import ClientResponse
+
+from crawler.instants import InstantsCrawler
 
 os.environ.setdefault('MYINSTANTS_BOT_TOKEN', 'test-token')
 os.environ.setdefault('MYINSTANTS_ENV', 'dev')
@@ -14,23 +15,50 @@ os.environ.setdefault(
 )
 
 
-# ponytail: aiohttp 3.14 added a required keyword-only `stream_writer`
-# argument to ClientResponse.__init__ (only its `.output_size` is read).
-# aioresponses 0.7.9 (latest release) doesn't pass it yet — fix is merged
-# upstream but unreleased (github.com/pnuckowski/aioresponses/pull/288).
-# Default it for the test session instead of pinning an unreleased git
-# commit as a dependency. Drop this fixture once aioresponses ships that
-# fix in a release and aioresponses~=0.7 is bumped past it.
-@pytest.fixture(autouse=True, scope='session')
-def _aioresponses_stream_writer_default():
-    init = ClientResponse.__init__
-    original = init.__kwdefaults__
-    init.__kwdefaults__ = {
-        **(original or {}),
-        'stream_writer': Mock(spec=['output_size'], output_size=0),
-    }
-    yield
-    init.__kwdefaults__ = original
+class FakeResponse:
+    def __init__(self, status_code: int, content: bytes = b'') -> None:
+        self.status_code = status_code
+        self.content = content
+
+
+class FakeSession:
+    def __init__(self) -> None:
+        self._queues: dict[str, list[FakeResponse | Exception]] = {}
+        self.calls: list[tuple[str, str, tuple[float, float]]] = []
+
+    def queue(self, url: str, *items: FakeResponse | Exception) -> None:
+        self._queues.setdefault(url, []).extend(items)
+
+    async def get(
+        self,
+        url: str,
+        *,
+        impersonate: str,
+        timeout: tuple[float, float],  # noqa: ASYNC109
+    ) -> FakeResponse:
+        self.calls.append((url, impersonate, timeout))
+        queue = self._queues.get(url)
+        if not queue:
+            raise AssertionError(f'FakeSession: no queued response for {url}')
+        item = queue.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    def request_count(self, url: str) -> int:
+        return sum(call[0] == url for call in self.calls)
+
+    async def close(self) -> None:
+        pass
+
+
+@pytest.fixture
+def session() -> FakeSession:
+    return FakeSession()
+
+
+def build_crawler(session: FakeSession, **kwargs: Any) -> InstantsCrawler:
+    return InstantsCrawler(session=session, **kwargs)
 
 
 @pytest.fixture

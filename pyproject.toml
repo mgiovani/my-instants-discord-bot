@@ -9,6 +9,7 @@ authors = [{ name = 'Giovani Moutinho', email = 'e@giovani.dev' }]
 dependencies = [
     'discord-py[voice]>=2.7.1,<2.8',
     'yt-dlp>=2025.1.15',
+    'curl-cffi~=0.16',
     'beautifulsoup4~=4.13',
     'aiohttp~=3.11',
     'loguru~=0.7.3',
@@ -28,7 +29,6 @@ dev = [
     'pytest-asyncio~=1.4',
     'pytest-cov~=6.0',
     'pytest-mock~=3.14',
-    'aioresponses~=0.7',
     'ruff~=0.9',
     'pyright~=1.1.391',
     'pre-commit~=4.0',
