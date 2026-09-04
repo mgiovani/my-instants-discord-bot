@@ -25,6 +25,9 @@ if TYPE_CHECKING:
 _BASE_URL = 'https://www.myinstants.com'
 _MP3_PATH_RE = re.compile(r'/media[^\s"\']+\.mp3', re.IGNORECASE)
 _VIEWS_RE = re.compile(r'[\d,]+\s*views?', re.IGNORECASE)
+# Cloudflare 403s any client whose TLS fingerprint isn't a real browser;
+# a full browser header set alone does not get through.
+_IMPERSONATE = 'chrome'
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,13 +64,32 @@ class _AsyncCache(Protocol):
     async def set(self, key: str, value: object) -> None: ...
 
 
+class _HTTPResponse(Protocol):
+    status_code: int
+    content: bytes
+
+
+class _AsyncClientSession(Protocol):
+    """Typed view of the curl_cffi session methods we use (lets a
+    structural test double stand in without subclassing AsyncSession)."""
+
+    async def get(
+        self,
+        url: str,
+        *,
+        impersonate: str,
+        timeout: tuple[float, float],  # noqa: ASYNC109 -- curl_cffi's name
+    ) -> _HTTPResponse: ...
+    async def close(self) -> None: ...
+
+
 class InstantsCrawler:
     BASE_URL = _BASE_URL
 
     def __init__(
         self,
         *,
-        session: AsyncSession[Response] | None = None,
+        session: _AsyncClientSession | None = None,
         timeout_seconds: float = 10.0,
         connect_timeout_seconds: float = 5.0,
         search_limit: int = 25,
@@ -76,19 +98,15 @@ class InstantsCrawler:
         rate_limit_per_sec: float = 5.0,
         max_retries: int = 2,
         retry_backoff_seconds: float = 0.5,
-        impersonate: str = 'chrome',
     ) -> None:
         self._owns_session = session is None
         self._timeout: tuple[float, float] = (
             connect_timeout_seconds,
-            timeout_seconds,
+            # curl_cffi sums the tuple into one ceiling, so the read half
+            # is the remaining budget, not the full total.
+            max(timeout_seconds - connect_timeout_seconds, 0.0),
         )
-        self._session = session
-        # ponytail: myinstants.com's Cloudflare WAF hard-blocks any client
-        # whose TLS/HTTP2 fingerprint isn't a real browser (403), even with
-        # a full browser header set. curl_cffi's `impersonate` fakes the
-        # fingerprint itself, which is the only thing that gets us a 200.
-        self._impersonate = impersonate
+        self._session: _AsyncClientSession | None = session
         self._search_limit = search_limit
         self._search_cache: _AsyncCache = Cache(
             Cache.MEMORY, ttl=search_ttl_seconds
@@ -105,7 +123,7 @@ class InstantsCrawler:
             await self._session.close()
             self._session = None
 
-    async def _get_session(self) -> AsyncSession[Response]:
+    async def _get_session(self) -> _AsyncClientSession:
         if self._session is None:
             self._session = AsyncSession[Response]()
         return self._session
@@ -137,11 +155,11 @@ class InstantsCrawler:
             f'GET {url} failed after retries: {last_exc}'
         ) from last_exc
 
-    async def _get_body(self, url: str) -> Response:
+    async def _get_body(self, url: str) -> _HTTPResponse:
         session = await self._get_session()
         async with self._limiter:
             return await session.get(
-                url, impersonate=self._impersonate, timeout=self._timeout
+                url, impersonate=_IMPERSONATE, timeout=self._timeout
             )
 
     async def search(self, query: str) -> list[InstantSummary]:

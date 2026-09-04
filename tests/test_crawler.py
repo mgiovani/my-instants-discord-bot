@@ -59,6 +59,23 @@ async def test_search_returns_parsed_summaries(
     )
 
 
+async def test_search_sends_browser_impersonation(
+    crawler, session, search_results_body
+):
+    # Guards the Cloudflare TLS-fingerprint workaround: nothing else in this
+    # suite inspects the kwargs passed to session.get(), so deleting
+    # `impersonate=` from _get_body (reverting the fix this branch exists
+    # for) would otherwise leave the whole suite green.
+    url = 'https://www.myinstants.com/search?name=discord'
+    session.queue(url, FakeResponse(200, search_results_body))
+    await crawler.search('discord')
+
+    assert len(session.calls) == 1
+    _, impersonate, timeout = session.calls[0]
+    assert impersonate == 'chrome'
+    assert timeout == (5.0, 5.0)
+
+
 async def test_first_match_returns_first_result(
     crawler, session, search_results_body
 ):
@@ -83,7 +100,8 @@ async def test_first_match_raises_when_no_results(crawler, session):
         await crawler.first_match('nomatch')
 
 
-async def test_http_5xx_raises_crawler_http_error(crawler, session):
+async def test_http_5xx_raises_crawler_http_error(session):
+    crawler = build_crawler(session, max_retries=0, retry_backoff_seconds=0)
     session.queue(
         'https://www.myinstants.com/search?name=x', FakeResponse(503)
     )
@@ -91,7 +109,8 @@ async def test_http_5xx_raises_crawler_http_error(crawler, session):
         await crawler.search('x')
 
 
-async def test_connection_error_raises_crawler_http_error(crawler, session):
+async def test_connection_error_raises_crawler_http_error(session):
+    crawler = build_crawler(session, max_retries=0, retry_backoff_seconds=0)
     session.queue(
         'https://www.myinstants.com/search?name=x',
         ConnectionError('boom'),
@@ -168,7 +187,7 @@ async def test_fetch_retries_on_transient(session, search_results_body):
 async def test_fetch_exhausts_retries_on_repeated_5xx(session):
     crawler = build_crawler(session, max_retries=2, retry_backoff_seconds=0)
     url = 'https://www.myinstants.com/search?name=x'
-    session.queue(url, FakeResponse(503))
+    session.queue(url, FakeResponse(503), FakeResponse(503), FakeResponse(503))
     with pytest.raises(CrawlerHTTPError, match='failed after retries'):
         await crawler.search('x')
     assert session.request_count(url) == 3

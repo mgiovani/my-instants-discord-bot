@@ -15,6 +15,10 @@ dependencies = [
     # it up automatically and retries its own 403s with impersonation.
     'curl-cffi~=0.16',
     'beautifulsoup4~=4.13',
+    # Nothing imports aiohttp directly any more (curl-cffi replaced it in
+    # crawler/instants.py), but it still arrives transitively via
+    # discord-py[voice]. Kept as a deliberate security floor so a future
+    # resolve can't silently pick an old, pre-CVE-sweep aiohttp.
     'aiohttp~=3.11',
     'loguru~=0.7.3',
     'pydantic~=2.10',
