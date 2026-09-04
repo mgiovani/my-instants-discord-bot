@@ -32,6 +32,7 @@ _YTDL_OPTIONS: dict[str, Any] = {
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
+    'extractor_args': {'generic': {'impersonate': ['']}},
 }
 
 
