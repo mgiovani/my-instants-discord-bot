@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
+import discord
 import pytest
 
 from bot.commands import HelpCog, PlaybackCog, QueueCog
 from bot.exceptions import (
     EmptyQueueError,
+    NoSearchResultsError,
     NothingPlayingError,
     NotInVoiceError,
+    VoiceConnectError,
 )
 from bot.voice import GuildVoiceStateManager
 
@@ -215,3 +219,89 @@ async def test_notify_sink_passes_embed_as_kwarg(playback_cog, manager):
     call = interaction.channel.send.await_args
     assert call.kwargs.get('embed') is embed
     assert not call.args
+
+
+def _voice_interaction(guild_id: int = 1):
+    channel = MagicMock(spec=discord.VoiceChannel)
+    channel.id = 77
+    channel.connect = AsyncMock()
+
+    interaction = _interaction(guild_id=guild_id)
+    interaction.user.voice = SimpleNamespace(channel=channel)
+    interaction.guild = MagicMock()
+    interaction.guild.voice_client = None
+    return interaction, channel
+
+
+async def test_ensure_connected_clears_stale_voice_client(
+    playback_cog, manager
+):
+    interaction, channel = _voice_interaction()
+    stale = MagicMock(spec=discord.VoiceClient)
+    stale.is_connected.return_value = False
+    stale.disconnect = AsyncMock()
+    interaction.guild.voice_client = stale
+    state = await manager.get_or_create(1)
+
+    await playback_cog._ensure_connected(interaction, state)
+
+    stale.disconnect.assert_awaited_once_with(force=True)
+    channel.connect.assert_awaited_once()
+
+
+@pytest.mark.parametrize(
+    'exc',
+    [
+        TimeoutError(),
+        discord.ClientException('Already connected to a voice channel.'),
+    ],
+)
+async def test_ensure_connected_maps_connect_failures(
+    playback_cog, manager, exc
+):
+    interaction, channel = _voice_interaction()
+    channel.connect.side_effect = exc
+    state = await manager.get_or_create(1)
+    state.voice = MagicMock(spec=discord.VoiceClient)
+
+    with pytest.raises(VoiceConnectError):
+        await playback_cog._ensure_connected(interaction, state)
+    assert state.voice is None
+
+
+async def test_concurrent_ensure_connected_connects_once(
+    playback_cog, manager
+):
+    interaction, channel = _voice_interaction()
+    state = await manager.get_or_create(1)
+
+    async def connect(**_kwargs):
+        await asyncio.sleep(0)
+        voice = MagicMock(spec=discord.VoiceClient)
+        voice.is_connected.return_value = True
+        voice.channel = channel
+        interaction.guild.voice_client = voice
+        return voice
+
+    channel.connect.side_effect = connect
+
+    await asyncio.gather(
+        playback_cog._ensure_connected(interaction, state),
+        playback_cog._ensure_connected(interaction, state),
+    )
+
+    assert channel.connect.await_count == 1
+
+
+async def test_play_does_not_join_voice_when_search_fails(
+    playback_cog, manager
+):
+    interaction, channel = _voice_interaction()
+    playback_cog.crawler.first_match = AsyncMock(
+        side_effect=NoSearchResultsError('nope')
+    )
+
+    with pytest.raises(NoSearchResultsError):
+        await playback_cog.play.callback(playback_cog, interaction, 'nope')
+
+    channel.connect.assert_not_awaited()

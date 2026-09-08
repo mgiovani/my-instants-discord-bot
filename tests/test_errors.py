@@ -5,12 +5,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from discord import app_commands
+from discord.errors import ClientException
 
 from bot.errors import handle_app_command_error
 from bot.exceptions import (
     EmptyQueueError,
     NothingPlayingError,
     NotInVoiceError,
+    VoiceConnectError,
 )
 
 
@@ -83,3 +85,22 @@ async def test_user_facing_errors_dont_reach_sentry(error_cls):
         interaction, error_cls(), sentry_capture=capture
     )
     assert captured == []
+
+
+@pytest.mark.parametrize(
+    'exc',
+    [
+        TimeoutError(),
+        ClientException('Already connected to a voice channel.'),
+    ],
+)
+async def test_voice_connect_failures_are_user_facing(exc):
+    interaction = _interaction(done=True)
+    await handle_app_command_error(
+        interaction, VoiceConnectError(str(exc) or repr(exc))
+    )
+
+    interaction.followup.send.assert_awaited_once()
+    message = interaction.followup.send.await_args.args[0]
+    assert 'Connect' in message
+    assert 'broke on my end' not in message

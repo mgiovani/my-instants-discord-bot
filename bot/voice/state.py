@@ -34,6 +34,7 @@ class GuildVoiceState:
         self.skip_vote_threshold = skip_vote_threshold
         self.loop_max_iterations = loop_max_iterations
         self.voice: discord.VoiceClient | None = None
+        self.connect_lock = asyncio.Lock()
         self.current: Song | None = None
         self.songs: SongQueue = SongQueue()
         self.skip_votes: set[int] = set()

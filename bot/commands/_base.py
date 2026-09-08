@@ -4,8 +4,9 @@ from typing import TYPE_CHECKING, cast
 
 import discord
 from discord.ext import commands
+from loguru import logger
 
-from bot.exceptions import NotInVoiceError
+from bot.exceptions import NotInVoiceError, VoiceConnectError
 
 if TYPE_CHECKING:
     from bot.config import Settings
@@ -65,14 +66,50 @@ class BotCogBase(commands.Cog):
         state: GuildVoiceState,
     ) -> discord.VoiceClient:
         target = self._require_voice_channel(interaction)
+        async with state.connect_lock:
+            return await self._connect_locked(interaction, target, state)
+
+    async def _connect_locked(
+        self,
+        interaction: discord.Interaction,
+        target: discord.VoiceChannel | discord.StageChannel,
+        state: GuildVoiceState,
+    ) -> discord.VoiceClient:
         live = interaction.guild.voice_client if interaction.guild else None
 
-        if isinstance(live, discord.VoiceClient) and live.is_connected():
-            if live.channel.id != target.id:
-                await live.move_to(target)
-            state.voice = live
-            return live
+        if isinstance(live, discord.VoiceClient):
+            if live.is_connected():
+                try:
+                    if live.channel.id != target.id:
+                        await live.move_to(
+                            target,
+                            timeout=self.settings.voice_connect_timeout_seconds,
+                        )
+                except (TimeoutError, discord.ClientException) as exc:
+                    state.voice = None
+                    await self._force_disconnect(live)
+                    raise VoiceConnectError(str(exc) or repr(exc)) from exc
+                state.voice = live
+                return live
+            await self._force_disconnect(live)
 
-        voice = await target.connect(self_deaf=True)
+        try:
+            voice = await target.connect(
+                self_deaf=True,
+                timeout=self.settings.voice_connect_timeout_seconds,
+            )
+        except (TimeoutError, discord.ClientException) as exc:
+            state.voice = None
+            raise VoiceConnectError(str(exc) or repr(exc)) from exc
         state.voice = voice
         return voice
+
+    @staticmethod
+    async def _force_disconnect(voice: discord.VoiceClient) -> None:
+        try:
+            await voice.disconnect(force=True)
+        except Exception as exc:
+            logger.warning(
+                'Could not clear stale voice client: {exc}', exc=exc
+            )
+            voice.cleanup()

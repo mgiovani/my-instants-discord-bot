@@ -4,6 +4,7 @@ import asyncio
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, cast
+from urllib.parse import urlencode
 
 from aiocache import Cache  # pyright: ignore[reportMissingTypeStubs]
 from aiolimiter import AsyncLimiter
@@ -14,6 +15,7 @@ from loguru import logger
 
 from bot.exceptions import (
     CrawlerHTTPError,
+    CrawlerNotFoundError,
     CrawlerParseError,
     NoSearchResultsError,
 )
@@ -26,6 +28,7 @@ _BASE_URL = 'https://www.myinstants.com'
 _MP3_PATH_RE = re.compile(r'/media[^\s"\']+\.mp3', re.IGNORECASE)
 _VIEWS_RE = re.compile(r'[\d,]+\s*views?', re.IGNORECASE)
 _IMPERSONATE = 'chrome'
+_RETRYABLE_STATUS = frozenset({403, 408, 425})
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,7 +138,12 @@ class InstantsCrawler:
             else:
                 if response.status_code < 400:
                     return response.content
-                if response.status_code < 500:
+                if response.status_code == 404:
+                    raise CrawlerNotFoundError(f'GET {url} failed: HTTP 404')
+                if (
+                    response.status_code < 500
+                    and response.status_code not in _RETRYABLE_STATUS
+                ):
                     raise CrawlerHTTPError(
                         f'GET {url} failed: HTTP {response.status_code}'
                     )
@@ -166,9 +174,14 @@ class InstantsCrawler:
             logger.debug('Cache hit: search {key!r}', key=key)
             return cached
         logger.debug('Searching myinstants for {query!r}', query=cleaned)
-        soup = await self._fetch_soup(
-            f'{_BASE_URL}/search?name={cleaned}',
-        )
+        try:
+            soup = await self._fetch_soup(
+                f'{_BASE_URL}/search?{urlencode({"name": cleaned})}',
+            )
+        except CrawlerNotFoundError:
+            logger.warning('Search returned 404, treating as no results')
+            await self._search_cache.set(key, [])
+            return []
         results = self._parse_search_results(soup)
         await self._search_cache.set(key, results)
         return results

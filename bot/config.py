@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     )
 
     idle_timeout_seconds: int = Field(default=180, ge=10, le=3600)
+    voice_connect_timeout_seconds: float = Field(default=20.0, ge=5.0, le=60.0)
     skip_vote_threshold: int = Field(default=3, ge=1, le=20)
     queue_page_size: int = Field(default=10, ge=1, le=25)
     default_volume: float = Field(default=0.5, ge=0.0, le=1.0)
