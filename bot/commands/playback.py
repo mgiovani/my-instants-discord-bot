@@ -18,8 +18,6 @@ class PlaybackCog(BotCogBase):
         self._require_voice_channel(interaction)
         await interaction.response.defer()
 
-        # Resolved before joining so a failed lookup does not drag the bot
-        # into the channel.
         instant = await self.crawler.first_match(search)
         details = await self.crawler.get_details(instant)
 

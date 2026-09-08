@@ -236,7 +236,6 @@ def _voice_interaction(guild_id: int = 1):
 async def test_ensure_connected_clears_stale_voice_client(
     playback_cog, manager
 ):
-    """A half-open client must be cleared or connect() always rejects it."""
     interaction, channel = _voice_interaction()
     stale = MagicMock(spec=discord.VoiceClient)
     stale.is_connected.return_value = False

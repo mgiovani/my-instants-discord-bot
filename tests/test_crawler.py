@@ -210,7 +210,6 @@ async def test_4xx_not_retried(session):
 
 
 async def test_search_404_means_no_results(session):
-    """myinstants 404s a search with no matches instead of returning empty."""
     crawler = build_crawler(session, max_retries=2, retry_backoff_seconds=0)
     url = 'https://www.myinstants.com/search?name=zzznope'
     session.queue(url, FakeResponse(404))
@@ -247,7 +246,6 @@ async def test_transient_4xx_is_retried(session, search_results_body, status):
 
 
 async def test_429_is_not_retried(session):
-    """Retrying a rate limit on a fixed backoff escalates it to a hard block."""
     crawler = build_crawler(session, max_retries=2, retry_backoff_seconds=0)
     url = 'https://www.myinstants.com/search?name=x'
     session.queue(url, FakeResponse(429))
@@ -269,7 +267,6 @@ async def test_429_is_not_retried(session):
 async def test_search_url_encodes_query(
     session, search_results_body, query, expected
 ):
-    """Raw interpolation let & # + break or silently truncate the query."""
     crawler = build_crawler(session)
     url = f'https://www.myinstants.com/search?{expected}'
     session.queue(url, FakeResponse(200, search_results_body))

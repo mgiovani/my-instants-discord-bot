@@ -86,15 +86,11 @@ class BotCogBase(commands.Cog):
                             timeout=self.settings.voice_connect_timeout_seconds,
                         )
                 except (TimeoutError, discord.ClientException) as exc:
-                    # A move that times out leaves an unreachable client
-                    # registered; clear it so the next call can reconnect.
                     state.voice = None
                     await self._force_disconnect(live)
                     raise VoiceConnectError(str(exc) or repr(exc)) from exc
                 state.voice = live
                 return live
-            # discord.py rejects connect() while any voice client exists for
-            # the guild, so a half-open one has to go or every retry raises.
             await self._force_disconnect(live)
 
         try:
@@ -116,6 +112,4 @@ class BotCogBase(commands.Cog):
             logger.warning(
                 'Could not clear stale voice client: {exc}', exc=exc
             )
-            # disconnect() only deregisters via cleanup() once it returns, so
-            # a raise would otherwise leave the client wedged in the guild.
             voice.cleanup()
