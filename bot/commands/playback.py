@@ -18,11 +18,14 @@ class PlaybackCog(BotCogBase):
         self._require_voice_channel(interaction)
         await interaction.response.defer()
 
+        # Resolved before joining: a failed search should not drag the bot
+        # into the channel, and a doomed handshake should not stall the lookup.
+        instant = await self.crawler.first_match(search)
+        details = await self.crawler.get_details(instant)
+
         state = await self._state_for(interaction)
         await self._ensure_connected(interaction, state)
 
-        instant = await self.crawler.first_match(search)
-        details = await self.crawler.get_details(instant)
         source = await YTDLSource.from_url(
             interaction,
             instant.mp3_url,

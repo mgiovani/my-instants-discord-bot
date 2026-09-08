@@ -17,6 +17,13 @@ class NotInVoiceError(VoiceError):
     user_message = 'You need to be in a voice channel to use this.'
 
 
+class VoiceConnectError(VoiceError):
+    user_message = (
+        'I could not join your voice channel. Check that I have the '
+        '**Connect** permission there and that the channel is not full.'
+    )
+
+
 class NothingPlayingError(MyInstantsBotError):
     user_message = 'Nothing is playing right now.'
 
@@ -54,6 +61,10 @@ class CrawlerParseError(CrawlerError):
 
 
 class CrawlerHTTPError(CrawlerError):
+    pass
+
+
+class CrawlerNotFoundError(CrawlerHTTPError):
     pass
 
 

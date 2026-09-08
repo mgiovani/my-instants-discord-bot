@@ -203,10 +203,71 @@ async def test_fetch_retries_on_timeout(session, search_results_body):
 async def test_4xx_not_retried(session):
     crawler = build_crawler(session, max_retries=2, retry_backoff_seconds=0)
     url = 'https://www.myinstants.com/search?name=x'
-    session.queue(url, FakeResponse(404))
+    session.queue(url, FakeResponse(400))
     with pytest.raises(CrawlerHTTPError):
         await crawler.search('x')
     assert session.request_count(url) == 1
+
+
+async def test_search_404_means_no_results(session):
+    """myinstants 404s a search with no matches instead of returning empty."""
+    crawler = build_crawler(session, max_retries=2, retry_backoff_seconds=0)
+    url = 'https://www.myinstants.com/search?name=zzznope'
+    session.queue(url, FakeResponse(404))
+
+    assert await crawler.search('zzznope') == []
+    assert session.request_count(url) == 1
+
+    with pytest.raises(NoSearchResultsError):
+        await crawler.first_match('zzznope')
+
+
+async def test_search_404_is_cached(session):
+    crawler = build_crawler(session)
+    url = 'https://www.myinstants.com/search?name=zzznope'
+    session.queue(url, FakeResponse(404))
+
+    await crawler.search('zzznope')
+    await crawler.search('zzznope')
+
+    assert session.request_count(url) == 1
+
+
+@pytest.mark.parametrize('status', [403, 429])
+async def test_transient_4xx_is_retried(session, search_results_body, status):
+    """Cloudflare 403 challenges and 429s clear on a retry; 404s do not."""
+    crawler = build_crawler(session, max_retries=2, retry_backoff_seconds=0)
+    url = 'https://www.myinstants.com/search?name=discord'
+    session.queue(
+        url, FakeResponse(status), FakeResponse(200, search_results_body)
+    )
+    results = await crawler.search('discord')
+
+    assert len(results) == 25
+    assert session.request_count(url) == 2
+
+
+@pytest.mark.parametrize(
+    ('query', 'expected'),
+    [
+        ('tom & jerry', 'name=tom+%26+jerry'),
+        ('#1', 'name=%231'),
+        ('a+b', 'name=a%2Bb'),
+        ('what?', 'name=what%3F'),
+        ('discord', 'name=discord'),
+    ],
+)
+async def test_search_url_encodes_query(
+    session, search_results_body, query, expected
+):
+    """Raw interpolation let & # + break or silently truncate the query."""
+    crawler = build_crawler(session)
+    url = f'https://www.myinstants.com/search?{expected}'
+    session.queue(url, FakeResponse(200, search_results_body))
+
+    await crawler.search(query)
+
+    assert [call[0] for call in session.calls] == [url]
 
 
 async def test_get_details_parses_expected_fields(
