@@ -102,5 +102,6 @@ async def test_voice_connect_failures_are_user_facing(exc):
 
     interaction.followup.send.assert_awaited_once()
     message = interaction.followup.send.await_args.args[0]
+    assert 'View Channel' in message
     assert 'Connect' in message
     assert 'broke on my end' not in message

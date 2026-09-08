@@ -19,8 +19,9 @@ class NotInVoiceError(VoiceError):
 
 class VoiceConnectError(VoiceError):
     user_message = (
-        'I could not join your voice channel. Check that I have the '
-        '**Connect** permission there and that the channel is not full.'
+        'I could not join your voice channel. Ask a server admin to edit that '
+        'channel and give me **View Channel**, **Connect** and **Speak**, '
+        'then check the channel is not full.'
     )
 
 
