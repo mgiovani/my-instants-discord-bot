@@ -222,7 +222,6 @@ async def test_notify_sink_passes_embed_as_kwarg(playback_cog, manager):
 
 
 def _voice_interaction(guild_id: int = 1):
-    """Interaction whose user sits in a real-typed voice channel."""
     channel = MagicMock(spec=discord.VoiceChannel)
     channel.id = 77
     channel.connect = AsyncMock()
@@ -264,6 +263,7 @@ async def test_ensure_connected_maps_connect_failures(
     interaction, channel = _voice_interaction()
     channel.connect.side_effect = exc
     state = await manager.get_or_create(1)
+    state.voice = MagicMock(spec=discord.VoiceClient)
 
     with pytest.raises(VoiceConnectError):
         await playback_cog._ensure_connected(interaction, state)
@@ -297,7 +297,6 @@ async def test_concurrent_ensure_connected_connects_once(
 async def test_play_does_not_join_voice_when_search_fails(
     playback_cog, manager
 ):
-    """A failed lookup must not drag the bot into the channel."""
     interaction, channel = _voice_interaction()
     playback_cog.crawler.first_match = AsyncMock(
         side_effect=NoSearchResultsError('nope')

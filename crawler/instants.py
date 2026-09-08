@@ -28,9 +28,10 @@ _BASE_URL = 'https://www.myinstants.com'
 _MP3_PATH_RE = re.compile(r'/media[^\s"\']+\.mp3', re.IGNORECASE)
 _VIEWS_RE = re.compile(r'[\d,]+\s*views?', re.IGNORECASE)
 _IMPERSONATE = 'chrome'
-# Cloudflare answers a share of requests with a 403 challenge and
-# rate-limits with 429; both clear on a retry, unlike a real 400/404.
-_RETRYABLE_STATUS = frozenset({403, 408, 425, 429})
+# Cloudflare 403 challenges clear on a retry; a 400/404 will not. 429 is
+# excluded on purpose: retrying a rate limit on a fixed sub-second backoff
+# is how a soft limit escalates into a hard block.
+_RETRYABLE_STATUS = frozenset({403, 408, 425})
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,13 +177,16 @@ class InstantsCrawler:
             logger.debug('Cache hit: search {key!r}', key=key)
             return cached
         logger.debug('Searching myinstants for {query!r}', query=cleaned)
-        # myinstants answers a search with no matches with a 404, not an
+        # myinstants 404s a search with no matches instead of returning an
         # empty 200, so this is the ordinary "nothing found" path.
         try:
             soup = await self._fetch_soup(
                 f'{_BASE_URL}/search?{urlencode({"name": cleaned})}',
             )
         except CrawlerNotFoundError:
+            # Logged because a moved/renamed /search endpoint would look
+            # exactly like every query legitimately matching nothing.
+            logger.warning('Search returned 404, treating as no results')
             await self._search_cache.set(key, [])
             return []
         results = self._parse_search_results(soup)

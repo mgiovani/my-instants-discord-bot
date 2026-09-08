@@ -233,9 +233,8 @@ async def test_search_404_is_cached(session):
     assert session.request_count(url) == 1
 
 
-@pytest.mark.parametrize('status', [403, 429])
+@pytest.mark.parametrize('status', [403, 408, 425])
 async def test_transient_4xx_is_retried(session, search_results_body, status):
-    """Cloudflare 403 challenges and 429s clear on a retry; 404s do not."""
     crawler = build_crawler(session, max_retries=2, retry_backoff_seconds=0)
     url = 'https://www.myinstants.com/search?name=discord'
     session.queue(
@@ -245,6 +244,16 @@ async def test_transient_4xx_is_retried(session, search_results_body, status):
 
     assert len(results) == 25
     assert session.request_count(url) == 2
+
+
+async def test_429_is_not_retried(session):
+    """Retrying a rate limit on a fixed backoff escalates it to a hard block."""
+    crawler = build_crawler(session, max_retries=2, retry_backoff_seconds=0)
+    url = 'https://www.myinstants.com/search?name=x'
+    session.queue(url, FakeResponse(429))
+    with pytest.raises(CrawlerHTTPError):
+        await crawler.search('x')
+    assert session.request_count(url) == 1
 
 
 @pytest.mark.parametrize(

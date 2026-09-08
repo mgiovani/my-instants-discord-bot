@@ -66,8 +66,6 @@ class BotCogBase(commands.Cog):
         state: GuildVoiceState,
     ) -> discord.VoiceClient:
         target = self._require_voice_channel(interaction)
-        # Serialised per guild: two concurrent /mi calls would otherwise both
-        # get past the reuse check and race into connect().
         async with state.connect_lock:
             return await self._connect_locked(interaction, target, state)
 
@@ -83,15 +81,20 @@ class BotCogBase(commands.Cog):
             if live.is_connected():
                 try:
                     if live.channel.id != target.id:
-                        await live.move_to(target)
+                        await live.move_to(
+                            target,
+                            timeout=self.settings.voice_connect_timeout_seconds,
+                        )
                 except (TimeoutError, discord.ClientException) as exc:
+                    # A move that times out leaves an unreachable client
+                    # registered; clear it so the next call can reconnect.
+                    state.voice = None
+                    await self._force_disconnect(live)
                     raise VoiceConnectError(str(exc) or repr(exc)) from exc
                 state.voice = live
                 return live
-            # discord.py rejects connect() whenever a voice client merely
-            # exists for the guild, connected or not, so a half-open one from
-            # a failed handshake has to be cleared or every retry raises
-            # ClientException('Already connected to a voice channel.').
+            # discord.py rejects connect() while any voice client exists for
+            # the guild, so a half-open one has to go or every retry raises.
             await self._force_disconnect(live)
 
         try:
@@ -113,3 +116,6 @@ class BotCogBase(commands.Cog):
             logger.warning(
                 'Could not clear stale voice client: {exc}', exc=exc
             )
+            # disconnect() only deregisters via cleanup() once it returns, so
+            # a raise would otherwise leave the client wedged in the guild.
+            voice.cleanup()

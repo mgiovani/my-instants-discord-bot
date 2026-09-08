@@ -95,7 +95,6 @@ async def test_user_facing_errors_dont_reach_sentry(error_cls):
     ],
 )
 async def test_voice_connect_failures_are_user_facing(exc):
-    """Prod raised these bare, so users got 'Something broke on my end'."""
     interaction = _interaction(done=True)
     await handle_app_command_error(
         interaction, VoiceConnectError(str(exc) or repr(exc))

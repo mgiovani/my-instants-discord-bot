@@ -48,7 +48,7 @@ async def handle_app_command_error(
             'User-facing error in /{command}: {msg} [{cause}]',
             command=command_name,
             msg=root.user_message,
-            cause=repr(root),
+            cause=type(root).__name__,
         )
         await _reply_ephemeral(interaction, root.user_message)
         return
