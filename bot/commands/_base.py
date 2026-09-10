@@ -1,12 +1,21 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, cast
 
 import discord
 from discord.ext import commands
 from loguru import logger
 
-from bot.exceptions import NotInVoiceError, VoiceConnectError
+from bot.exceptions import (
+    NotInVoiceError,
+    VoiceChannelFullError,
+    VoiceChannelOverrideError,
+    VoiceConnectError,
+    VoiceMissingPermissionError,
+)
+
+_REQUIRED_TO_JOIN = (('View Channel', 'view_channel'), ('Connect', 'connect'))
 
 if TYPE_CHECKING:
     from bot.config import Settings
@@ -75,6 +84,7 @@ class BotCogBase(commands.Cog):
         target: discord.VoiceChannel | discord.StageChannel,
         state: GuildVoiceState,
     ) -> discord.VoiceClient:
+        self._check_can_join(target)
         live = interaction.guild.voice_client if interaction.guild else None
 
         if isinstance(live, discord.VoiceClient):
@@ -100,14 +110,80 @@ class BotCogBase(commands.Cog):
             )
         except (TimeoutError, discord.ClientException) as exc:
             state.voice = None
+            self._log_unexplained_failure(
+                target, exc, had_client=live is not None
+            )
             raise VoiceConnectError(str(exc) or repr(exc)) from exc
         state.voice = voice
         return voice
 
-    @staticmethod
-    async def _force_disconnect(voice: discord.VoiceClient) -> None:
+    def _check_can_join(
+        self, target: discord.VoiceChannel | discord.StageChannel
+    ) -> None:
+        me = target.guild.me
+        effective = target.permissions_for(me)
+        server_wide = me.guild_permissions
+        name = discord.utils.escape_markdown(target.name)
+
+        denied = [
+            (label, getattr(server_wide, attr))
+            for label, attr in _REQUIRED_TO_JOIN
+            if not getattr(effective, attr)
+        ]
+        blocked_by_channel = [
+            label
+            for label, allowed_server_wide in denied
+            if allowed_server_wide
+        ]
+        if blocked_by_channel:
+            raise VoiceChannelOverrideError(name, blocked_by_channel)
+        if denied:
+            raise VoiceMissingPermissionError(
+                name, [label for label, _ in denied]
+            )
+
+        if (
+            target.user_limit
+            and len(target.members) >= target.user_limit
+            and not effective.move_members
+        ):
+            raise VoiceChannelFullError(
+                discord.utils.escape_markdown(target.name)
+            )
+
+    def _log_unexplained_failure(
+        self,
+        target: discord.VoiceChannel | discord.StageChannel,
+        exc: BaseException,
+        *,
+        had_client: bool,
+    ) -> None:
+        me = target.guild.me
+        effective = target.permissions_for(me)
+        bot_voice = me.voice.channel if me.voice else None
+        logger.bind(
+            guild_id=target.guild.id,
+            channel_id=target.id,
+            channel_type=str(target.type),
+            can_view=effective.view_channel,
+            can_connect=effective.connect,
+            can_speak=effective.speak,
+            can_move_members=effective.move_members,
+            user_limit=target.user_limit,
+            occupancy=len(target.members),
+            rtc_region=target.rtc_region,
+            bot_voice_channel=bot_voice.id if bot_voice else None,
+            had_voice_client=had_client,
+        ).warning(
+            'Voice connect failed despite passing pre-flight: {exc!r}', exc=exc
+        )
+
+    async def _force_disconnect(self, voice: discord.VoiceClient) -> None:
         try:
-            await voice.disconnect(force=True)
+            async with asyncio.timeout(
+                self.settings.voice_cleanup_timeout_seconds
+            ):
+                await voice.disconnect(force=True)
         except Exception as exc:
             logger.warning(
                 'Could not clear stale voice client: {exc}', exc=exc

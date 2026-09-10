@@ -12,6 +12,7 @@ from bot.exceptions import (
     EmptyQueueError,
     NothingPlayingError,
     NotInVoiceError,
+    VoiceChannelOverrideError,
     VoiceConnectError,
 )
 
@@ -102,6 +103,17 @@ async def test_voice_connect_failures_are_user_facing(exc):
 
     interaction.followup.send.assert_awaited_once()
     message = interaction.followup.send.await_args.args[0]
+    assert 'could not join your voice channel' in message
+    assert 'broke on my end' not in message
+
+
+async def test_channel_override_error_names_the_permission():
+    interaction = _interaction(done=True)
+    await handle_app_command_error(
+        interaction, VoiceChannelOverrideError('general', ['View Channel'])
+    )
+
+    message = interaction.followup.send.await_args.args[0]
     assert 'View Channel' in message
-    assert 'Connect' in message
+    assert 'Re-inviting' in message
     assert 'broke on my end' not in message
