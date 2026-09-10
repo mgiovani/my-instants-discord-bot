@@ -34,10 +34,13 @@ class VoiceChannelOverrideError(VoiceError):
         self.user_message = (
             f'I cannot join **{channel_name}**. My server-wide permissions '
             'are fine, but that channel has its own permission settings that '
-            f'block me ({_humanise(missing)}). Open **Edit Channel > '
-            'Permissions** on it, add my role, and allow **View Channel**, '
-            '**Connect** and **Speak**. Re-inviting me will not fix this, '
-            'since the invite screen only sets server-wide permissions.'
+            f'block me ({_humanise(missing)}). Two ways to fix it: give me a '
+            'role that already has access to that channel (right-click me in '
+            'the member list, then **Roles**), or open **Edit Channel > '
+            'Permissions** on the channel, add my role, and allow '
+            '**View Channel**, **Connect** and **Speak**. Re-inviting me will '
+            'not fix this, since the invite screen only sets server-wide '
+            'permissions.'
         )
 
 
@@ -47,7 +50,9 @@ class VoiceMissingPermissionError(VoiceError):
         self.user_message = (
             f'I cannot join **{channel_name}** because I am missing '
             f'{_humanise(missing)}. Ask a server admin to grant my role those '
-            'permissions.'
+            'permissions in **Server Settings > Roles**, or give me a role '
+            'that already has access (right-click me in the member list, then '
+            '**Roles**).'
         )
 
 

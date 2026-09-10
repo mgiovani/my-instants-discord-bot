@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
+from loguru import logger
 
 from bot.commands import HelpCog, PlaybackCog, QueueCog
 from bot.exceptions import (
@@ -400,3 +401,60 @@ async def test_healthy_permissions_still_connect(playback_cog, manager):
     await playback_cog._ensure_connected(interaction, state)
 
     channel.connect.assert_awaited_once()
+
+
+async def test_mixed_denials_point_at_the_channel(playback_cog, manager):
+    interaction, channel = _voice_interaction(
+        channel_perms=_permissions(view_channel=False, connect=False),
+        server_perms=_permissions(view_channel=True, connect=False),
+    )
+    state = await manager.get_or_create(1)
+
+    with pytest.raises(VoiceChannelOverrideError) as excinfo:
+        await playback_cog._ensure_connected(interaction, state)
+
+    message = excinfo.value.user_message or ''
+    assert 'View Channel' in message
+    assert 'Connect' not in message.split('block me')[1].split(')')[0]
+    channel.connect.assert_not_awaited()
+
+
+async def test_unexplained_failure_logs_diagnostics(playback_cog, manager):
+    records: list[dict[str, object]] = []
+    logger.remove()
+    logger.add(
+        lambda m: records.append(dict(m.record['extra'])), level='WARNING'
+    )
+
+    interaction, channel = _voice_interaction()
+    channel.connect.side_effect = TimeoutError()
+    state = await manager.get_or_create(1)
+
+    with pytest.raises(VoiceConnectError):
+        await playback_cog._ensure_connected(interaction, state)
+    logger.complete()
+
+    assert records, 'expected a diagnostic record'
+    extra = records[-1]
+    assert extra['channel_id'] == channel.id
+    assert extra['can_view'] is True
+    assert extra['can_connect'] is True
+    assert extra['occupancy'] == 0
+    assert extra['had_voice_client'] is False
+
+
+async def test_force_disconnect_cleans_up_when_disconnect_hangs(playback_cog):
+    playback_cog.settings = playback_cog.settings.model_copy(
+        update={'voice_cleanup_timeout_seconds': 0.05}
+    )
+
+    async def never_returns(*, force: bool) -> None:
+        await asyncio.sleep(30)
+
+    voice = MagicMock(spec=discord.VoiceClient)
+    voice.disconnect = never_returns
+    voice.cleanup = MagicMock()
+
+    await playback_cog._force_disconnect(voice)
+
+    voice.cleanup.assert_called_once()

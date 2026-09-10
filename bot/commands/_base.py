@@ -15,6 +15,8 @@ from bot.exceptions import (
     VoiceMissingPermissionError,
 )
 
+_REQUIRED_TO_JOIN = (('View Channel', 'view_channel'), ('Connect', 'connect'))
+
 if TYPE_CHECKING:
     from bot.config import Settings
     from bot.voice import GuildVoiceState, GuildVoiceStateManager
@@ -121,21 +123,24 @@ class BotCogBase(commands.Cog):
         me = target.guild.me
         effective = target.permissions_for(me)
         server_wide = me.guild_permissions
+        name = discord.utils.escape_markdown(target.name)
 
-        required = (('View Channel', 'view_channel'), ('Connect', 'connect'))
-        missing = [
-            label for label, attr in required if not getattr(effective, attr)
+        denied = [
+            (label, getattr(server_wide, attr))
+            for label, attr in _REQUIRED_TO_JOIN
+            if not getattr(effective, attr)
         ]
-        if missing:
-            blocked_by_channel = all(
-                getattr(server_wide, attr)
-                for label, attr in required
-                if label in missing
+        blocked_by_channel = [
+            label
+            for label, allowed_server_wide in denied
+            if allowed_server_wide
+        ]
+        if blocked_by_channel:
+            raise VoiceChannelOverrideError(name, blocked_by_channel)
+        if denied:
+            raise VoiceMissingPermissionError(
+                name, [label for label, _ in denied]
             )
-            name = discord.utils.escape_markdown(target.name)
-            if blocked_by_channel:
-                raise VoiceChannelOverrideError(name, missing)
-            raise VoiceMissingPermissionError(name, missing)
 
         if (
             target.user_limit
