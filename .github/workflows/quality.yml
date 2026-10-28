@@ -27,7 +27,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
-          version: '0.5.15'
+          version: '0.13.5'
           enable-cache: true
 
       - name: Install dependencies
@@ -63,7 +63,7 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
-          version: '0.5.15'
+          version: '0.13.5'
           enable-cache: true
 
       - name: Install dependencies

@@ -2,7 +2,7 @@
 
 # --- Base image pinned by digest so reproducible builds survive tag drift.
 #     Refresh with `docker pull python:3.12-slim-bookworm` and paste the new sha.
-FROM python:3.12-slim-bookworm@sha256:58525e1a8dada8e72d6f8a11a0ddff8d981fd888549108db52455d577f927f77 AS base
+FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -13,7 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # --- Builder: install deps into a self-contained venv using uv.
 FROM base AS builder
-COPY --from=ghcr.io/astral-sh/uv:0.5.15 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /usr/local/bin/uv
 
 WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
